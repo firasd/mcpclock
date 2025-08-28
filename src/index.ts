@@ -173,7 +173,158 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
+		this.server.tool(
+			"clock_convert",
+			"Convert a timestamp given in one zone (UTC or IANA) to one or more target zones (UTC or IANA).\n" +
+			"Examples:\n" +
+			'  • clock_convert{"source_zone":"America/Mexico_City","iso":"2025-10-28T07:30:00","target_zones":["UTC","Asia/Dubai"]}\n' +
+			'  • clock_convert{"source_zone":"UTC","iso":"2025-10-28T15:30:00Z","target_zones":["Africa/Lagos"]}', {
+				source_zone: z.string().describe(
+					'IANA name † or "UTC". † Note: IANA names can contain "/", e.g., "Australia/Sydney".'
+				),
+				iso: z.string().describe(
+					'If source_zone is "UTC", pass a full UTC ISO-8601 string (e.g., "2025-10-28T15:30:00Z" or "...T15:30:00.123Z").\n' +
+					'Otherwise, an ISO-8601 date/time *without* timezone offset (e.g., "2025-10-28T07:30:00"), ' +
+					'which will be interpreted as wall-clock time in the specified IANA source_zone.'
+				),
+				target_zones: z.array(z.string())
+					.min(1).max(15)
+					.describe('Array of target IANA zones or "UTC" to convert into.')
+			},
+			async ({
+				source_zone,
+				iso,
+				target_zones
+			}) => {
+				try {
+					let srcDateUTC: Date;
 
+					// Validate source_zone before proceeding
+					if (source_zone !== "UTC" && !isValidIANATimeZone(source_zone)) {
+						throw new Error(`Invalid source_zone: "${source_zone}". Must be "UTC" or a valid IANA zone name.`);
+					}
+
+					if (source_zone === "UTC") {
+						// For UTC source, expect a full ISO string with Z or offset
+						if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?Z$/.test(iso)) {
+							// Updated regex to strictly require Z for UTC source_zone
+							throw new Error(`Invalid ISO format for UTC source: "${iso}". Expected YYYY-MM-DDTHH:MM(:SS)(.mmm)Z.`);
+						}
+						srcDateUTC = new Date(iso);
+					}
+					else { // IANA source_zone
+						if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?$/.test(iso)) {
+							throw new Error(`Invalid ISO-8601 format for IANA source "${source_zone}": "${iso}". Expected YYYY-MM-DDTHH:MM(:SS)(.mmm) without offset.`);
+						}
+						const isoTimestamp = iso.replace(' ', 'T'); // Should not be needed if regex is strict
+
+						// Using the "double date trick" for IANA local time to UTC conversion
+						const term1Ms = Date.parse(isoTimestamp + "Z"); // Create a date as if input was UTC
+						if (Number.isNaN(term1Ms)) {
+							throw new Error(`Invalid ISO date/time string for parsing: ${isoTimestamp}`);
+						}
+						// Get what 'term1Ms' would be if interpreted in the actual source_zone, then convert THAT to UTC string
+						const localTimeInSourceZoneStr = new Date(term1Ms)
+							.toLocaleString('sv-SE', {
+								timeZone: source_zone,
+								hour12: false
+							})
+							.replace(' ', 'T'); // 'sv-SE' gives 'YYYY-MM-DD HH:MM:SS'
+
+						const term2Ms = Date.parse(localTimeInSourceZoneStr + "Z"); // Date.parse assumes UTC if 'Z' is appended
+						if (Number.isNaN(term2Ms)) {
+							throw new Error(`Failed to parse localized time string for zone ${source_zone}: ${localTimeInSourceZoneStr}`);
+						}
+						// The difference (term1Ms - term2Ms) is the offset.
+						// If localTimeInSourceZoneStr was earlier than isoTimestamp (e.g. America/New_York), term2Ms < term1Ms, diff > 0.
+						// srcDateUTC should be term1Ms - (term1Ms - term2Ms) = term2Ms ??? NO
+						// Correct logic: offset = term1Ms - term2Ms. True UTC = term1Ms - offset
+						// srcDateUTC = new Date(term1Ms - (term1Ms - term2Ms)); // This is equivalent to new Date(term2Ms)
+						// srcDateUTC = new Date(term1Ms + (term1Ms - term2Ms)); // From prior examples: 2 * term1Ms - term2Ms
+						srcDateUTC = new Date(2 * term1Ms - term2Ms);
+					}
+
+					if (Number.isNaN(srcDateUTC.getTime())) {
+						throw new Error(`Could not determine a valid UTC date from source: ${source_zone}, iso: ${iso}`);
+					}
+
+					/* -------- Validate target zones -------- */
+					for (const tz of target_zones) {
+						if (tz !== "UTC" && !isValidIANATimeZone(tz)) {
+							throw new Error(`Invalid target zone: "${tz}". Must be "UTC" or a valid IANA zone name.`);
+						}
+					}
+
+					/* -------- Build outputs -------- */
+					const out = target_zones.map(targetZone => {
+						if (targetZone === "UTC") {
+							return {
+								timezone: "UTC",
+								iso: srcDateUTC.toISOString()
+							};
+						}
+
+						// For IANA target zones
+						return {
+							timezone: targetZone,
+
+							time12: new Intl.DateTimeFormat(
+								"en-US", {
+									hour: "numeric",
+									minute: "2-digit",
+									hour12: true,
+									timeZone: targetZone
+								}
+							).format(srcDateUTC),
+
+							time24: new Intl.DateTimeFormat(
+								"en-US", {
+									hour: "2-digit",
+									minute: "2-digit",
+									second: "2-digit",
+									hour12: false,
+									timeZone: targetZone
+								}
+							).format(srcDateUTC),
+
+							dayName: new Intl.DateTimeFormat(
+								"en-US", {
+									weekday: "long",
+									timeZone: targetZone
+								}
+							).format(srcDateUTC),
+
+							date: new Intl.DateTimeFormat(
+								"en-US", {
+									year: "numeric",
+									month: "short",
+									day: "numeric",
+									timeZone: targetZone
+								}
+							).format(srcDateUTC)
+						};
+					});
+
+					return {
+						content: [{
+							type: "text",
+							text: JSON.stringify(out, null, 2)
+						}]
+					};
+
+				}
+				catch (e: any) {
+					const errorMessage = e instanceof Error ? e.message : String(e);
+					return {
+						content: [{
+							type: "text",
+							text: `Error in clock_convert: ${errorMessage}`
+						}],
+						error: true
+					};
+				}
+			}
+		);
 
 	}
 }
