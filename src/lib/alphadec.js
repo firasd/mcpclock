@@ -58,7 +58,7 @@ export const alphadec = {
 				msOffsetInBeat: Number(msOffsetInBeat),
 				periodLetter,
 				barLetter,
-				readable,,
+				readable,
 				arcStartMsInYear,
 				arcEndMsInYear
 			};
