@@ -143,7 +143,7 @@ export class MyMCP extends McpAgent {
 					entries.push({
 						timezone: "Alphadec",
 						alphadec: AlphadecData.canonical,
-						...(!(AlphadecExplicit && suppressFullAlphadec) && {
+						...((AlphadecExplicit && !suppressFullAlphadec) && {
 							readable: AlphadecData.readable
 						})
 					});
@@ -319,6 +319,80 @@ export class MyMCP extends McpAgent {
 						content: [{
 							type: "text",
 							text: `Error in clock_convert: ${errorMessage}`
+						}],
+						error: true
+					};
+				}
+			}
+		);
+
+		this.server.tool(
+			"clock_convert_alphadec",
+			"Convert between a UTC ISO timestamp and an AlphaDec string.\n" +
+			"Examples:\n" +
+			'clock_convert_alphadec{"direction": "utc_to_alphadec", "value": "2025-06-09T16:30:00.000Z"}\n' +
+			'clock_convert_alphadec{"direction": "alphadec_to_utc", "value": "L3T5_000000"}\n\n Alphadec units (approx): Period (A-Z) ≈ 14.04 days (UTC yr (different length leap yr vs common yr) ÷ 26) | Arc (0-9) ≈ 33.7 hours (Period ÷ 10) | Bar (A-Z) ≈ 77.75 minutes (Arc ÷ 26) | Beat (0-9) ≈ 7.78 minutes (Bar ÷ 10). The final part of canonical Alphadec is milliseconds offset within the beat. Period F contains Mar Equinox, Period M contains Jun Solstice, Period S contains Sep Equinox, Period Z contains Dec Solstice. K-sortable; truncating significant digits creates natural time groupings, eg 2025_M2 contains every Alphadec in M2 arc.', {
+				direction: z.enum(["utc_to_alphadec", "alphadec_to_utc"])
+					.default("utc_to_alphadec")
+					.describe(
+						'Direction of conversion: "utc_to_alphadec" (default) or "alphadec_to_utc".'
+					),
+				value: z.string().describe(
+					'The value to convert: a UTC ISO 8601 string (e.g., "2025-10-24T13:30:00.000Z") ' +
+					'if direction is "utc_to_alphadec", or an AlphaDec string (e.g., "2025_V1G5_000000") ' +
+					'if direction is "alphadec_to_utc".'
+				)
+			},
+			async ({
+				direction,
+				value
+			}) => {
+				try {
+					if (direction === "utc_to_alphadec") {
+						// Validate if 'value' is a valid ISO string for UTC
+						if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?Z$/.test(value)) {
+							throw new Error(`Invalid UTC ISO format for "value": ${value}. Expected YYYY-MM-DDTHH:MM(:SS)(.mmm)Z.`);
+						}
+						const inputDate = new Date(value);
+						if (Number.isNaN(inputDate.getTime())) {
+							throw new Error(`Invalid date from UTC ISO string: ${value}`);
+						}
+						const encodeResult = alphadec.encode(inputDate);
+						return {
+							content: [{
+								type: "text",
+								text: JSON.stringify({
+									source_utc_iso: value,
+									alphadec: encodeResult.canonical
+								}, null, 2)
+							}]
+						};
+					}
+					else { // direction === "alphadec_to_utc"
+						if (!/^\d{4}_[A-Z]\d[A-Z]\d_[0-9]{6}$/.test(value)) {
+							throw new Error(`Invalid AlphaDec format for "value": ${value}. Expected YYYY_PaBt_MMMMMM.`);
+						}
+						const decodedDate = alphadec.decode(value);
+						if (Number.isNaN(decodedDate.getTime())) {
+							throw new Error(`Invalid AlphaDec string or unable to decode: ${value}`);
+						}
+						return {
+							content: [{
+								type: "text",
+								text: JSON.stringify({
+									source_alphadec: value,
+									utc_iso: decodedDate.toISOString()
+								}, null, 2)
+							}]
+						};
+					}
+				}
+				catch (e: any) {
+					const errorMessage = e instanceof Error ? e.message : String(e);
+					return {
+						content: [{
+							type: "text",
+							text: `Error in clock_convert_alphadec: ${errorMessage}`
 						}],
 						error: true
 					};
