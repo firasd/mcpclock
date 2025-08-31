@@ -400,6 +400,138 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
+		this.server.tool(
+			"clock_delta_utc",
+			"Calculate the time difference between two UTC ISO timestamps.\n" +
+			"Examples:\n" +
+			'clock_delta_utc{"start": "2022-01-15T10:30:00Z", "end": "2025-08-31T14:45:30Z"}\n' +
+			'clock_delta_utc{"start": "1963-11-22T18:30:00Z", "end": "2025-08-31T14:30:00Z"}\n\n' +
+			"Returns time difference as years + remaining days + hours/minutes/seconds.", {
+				start: z
+					.string()
+					.describe('Start UTC ISO timestamp (e.g., "2022-01-15T10:30:00Z")'),
+				end: z
+					.string()
+					.describe('End UTC ISO timestamp (e.g., "2025-08-31T14:45:30Z")'),
+			},
+			async ({
+				start,
+				end
+			}) => {
+				try {
+					// Validate ISO formats: YYYY-MM-DDTHH:MM:SSZ 
+					const ISO_UTC_SECONDS_RE =
+						/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+
+					if (!ISO_UTC_SECONDS_RE.test(start)) {
+						throw new Error(
+							`Invalid start UTC ISO format: ${start}. Expected YYYY-MM-DDTHH:MM:SSZ.`
+						);
+					}
+					if (!ISO_UTC_SECONDS_RE.test(end)) {
+						throw new Error(
+							`Invalid end UTC ISO format: ${end}. Expected YYYY-MM-DDTHH:MM:SSZ.`
+						);
+					}
+
+					const startDate = new Date(start);
+					const endDate = new Date(end);
+
+					if (Number.isNaN(startDate.getTime())) {
+						throw new Error(`Invalid start date: ${start}`);
+					}
+					if (Number.isNaN(endDate.getTime())) {
+						throw new Error(`Invalid end date: ${end}`);
+					}
+
+					// Ensure start <= end
+					if (startDate.getTime() > endDate.getTime()) {
+						throw new Error(`Start date ${start} is after end date ${end}`);
+					}
+
+					// Calculate total difference in milliseconds
+					const totalMs = endDate.getTime() - startDate.getTime();
+
+					// Years: count complete calendar years from start date
+					let years = 0;
+					let cursor = new Date(startDate);
+					while (true) {
+						const next = new Date(cursor);
+						next.setUTCFullYear(next.getUTCFullYear() + 1);
+						if (next.getTime() <= endDate.getTime()) {
+							years++;
+							cursor = next;
+						}
+						else {
+							break;
+						}
+					}
+
+					// Remaining time after full years
+					let remainingMs = endDate.getTime() - cursor.getTime();
+
+					const MS_DAY = 1000 * 60 * 60 * 24;
+					const MS_HOUR = 1000 * 60 * 60;
+					const MS_MIN = 1000 * 60;
+
+					const days = Math.floor(remainingMs / MS_DAY);
+					remainingMs %= MS_DAY;
+
+					const hours = Math.floor(remainingMs / MS_HOUR);
+					remainingMs %= MS_HOUR;
+
+					const minutes = Math.floor(remainingMs / MS_MIN);
+					remainingMs %= MS_MIN;
+
+					const seconds = Math.floor(remainingMs / 1000);
+
+					// Format readable string 
+					const parts: string[] = [];
+					if (years > 0) parts.push(`${years} year${years !== 1 ? "s" : ""}`);
+					if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
+					if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
+					if (minutes > 0) parts.push(`${minutes} minute${minutes !== 1 ? "s" : ""}`);
+					if (seconds > 0 || parts.length === 0)
+						parts.push(`${seconds} second${seconds !== 1 ? "s" : ""}`);
+
+					const readable = parts.join(", ");
+
+					return {
+						content: [{
+							type: "text",
+							text: JSON.stringify({
+									start_utc_iso: start,
+									end_utc_iso: end,
+									total_seconds: Math.floor(totalMs / 1000),
+									breakdown: {
+										years,
+										days,
+										hours,
+										minutes,
+										seconds,
+									},
+									readable,
+								},
+								null,
+								2
+							),
+						}, ],
+					};
+				}
+				catch (e: any) {
+					const errorMessage = e instanceof Error ? e.message : String(e);
+					return {
+						content: [{
+							type: "text",
+							text: `Error in clock_delta_utc: ${errorMessage}`,
+						}, ],
+						error: true,
+					};
+				}
+			}
+		);
+
+
 	}
 }
 
