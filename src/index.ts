@@ -331,7 +331,7 @@ export class MyMCP extends McpAgent {
 			"Convert between a UTC ISO timestamp and an AlphaDec string.\n" +
 			"Examples:\n" +
 			'clock_convert_alphadec{"direction": "utc_to_alphadec", "value": "2025-06-09T16:30:00.000Z"}\n' +
-			'clock_convert_alphadec{"direction": "alphadec_to_utc", "value": "L3T5_000000"}\n\n Alphadec units (approx): Period (A-Z) ≈ 14.04 days (UTC yr (different length leap yr vs common yr) ÷ 26) | Arc (0-9) ≈ 33.7 hours (Period ÷ 10) | Bar (A-Z) ≈ 77.75 minutes (Arc ÷ 26) | Beat (0-9) ≈ 7.78 minutes (Bar ÷ 10). The final part of canonical Alphadec is milliseconds offset within the beat. Period F contains Mar Equinox, Period M contains Jun Solstice, Period S contains Sep Equinox, Period Z contains Dec Solstice. K-sortable; truncating significant digits creates natural time groupings, eg 2025_M2 contains every Alphadec in M2 arc.', {
+			'clock_convert_alphadec{"direction": "alphadec_to_utc", "value": "2025_L3T5_000000"}\n\n Alphadec time encoding units (approx): Period (A-Z) ≈ 14.04 days (UTC yr (different length leap yr vs common yr) ÷ 26) | Arc (0-9) ≈ 33.7 hours (Period ÷ 10) | Bar (A-Z) ≈ 77.75 minutes (Arc ÷ 26) | Beat (0-9) ≈ 7.78 minutes (Bar ÷ 10). The ending _000000 is milliseconds offset within the beat. Period F contains Mar Equinox, Period M contains Jun Solstice, Period S contains Sep Equinox, Period Z contains Dec Solstice. K-sortable; truncating significant digits creates natural time groupings, eg 2025_M2 contains every Alphadec in M2 arc. Encoding is typically lossy by ≤1ms due to the 67,600-beat grid. There are exactly 400 ISO↔AlphaDec exact ms alignments per year, at every 0.25% of the year.', {
 				direction: z.enum(["utc_to_alphadec", "alphadec_to_utc"])
 					.default("utc_to_alphadec")
 					.describe(
