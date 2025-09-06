@@ -328,10 +328,10 @@ export class MyMCP extends McpAgent {
 
 		this.server.tool(
 			"clock_convert_alphadec",
-			"Convert between a UTC ISO timestamp and an AlphaDec string.\n" +
+			"Convert between a UTC ISO timestamp and an Alphadec string.\n" +
 			"Examples:\n" +
 			'clock_convert_alphadec{"direction": "utc_to_alphadec", "value": "2025-06-09T16:30:00.000Z"}\n' +
-			'clock_convert_alphadec{"direction": "alphadec_to_utc", "value": "2025_L3T5_000000"}\n\n Alphadec time encoding units (approx): Period (A-Z) ≈ 14.04 days (UTC yr (different length leap yr vs common yr) ÷ 26) | Arc (0-9) ≈ 33.7 hours (Period ÷ 10) | Bar (A-Z) ≈ 77.75 minutes (Arc ÷ 26) | Beat (0-9) ≈ 7.78 minutes (Bar ÷ 10). The ending _000000 is milliseconds offset within the beat. Period F contains Mar Equinox, Period M contains Jun Solstice, Period S contains Sep Equinox, Period Z contains Dec Solstice. K-sortable; truncating significant digits creates natural time groupings, eg 2025_M2 contains every Alphadec in M2 arc. Encoding is typically lossy by ≤1ms due to the 67,600-beat grid. There are exactly 400 ISO↔AlphaDec exact ms alignments per year, at every 0.25% of the year.', {
+			'clock_convert_alphadec{"direction": "alphadec_to_utc", "value": "2025_L3T5_000000"}\n\n Alphadec timestamp = Year_PeriodArcBarBeat_offset. Units (approx): Period (A-Z) ≈ 14.04 days (UTC yr (different length leap yr vs common yr) ÷ 26) | Arc (0-9) ≈ 33.7 hours (Period ÷ 10) | Bar (A-Z) ≈ 77.75 minutes (Arc ÷ 26) | Beat (0-9) ≈ 7.78 minutes (Bar ÷ 10). The ending _000000 is milliseconds offset within the beat (max offset: 466,508 common year; 467,786 leap year). Period F contains Mar Equinox, Period M contains Jun Solstice, Period S contains Sep Equinox, Period Z contains Dec Solstice. K-sortable; truncating significant digits creates natural time groupings, eg 2025_M2 contains every Alphadec in M2 arc. Encoding is typically lossy by ≤1ms due to the 67,600-beat grid. There are exactly 400 ISO↔AlphaDec exact ms alignments per year, at every 1/400th (every 0.25%) of the year.', {
 				direction: z.enum(["utc_to_alphadec", "alphadec_to_utc"])
 					.default("utc_to_alphadec")
 					.describe(
@@ -393,6 +393,85 @@ export class MyMCP extends McpAgent {
 						content: [{
 							type: "text",
 							text: `Error in clock_convert_alphadec: ${errorMessage}`
+						}],
+						error: true
+					};
+				}
+			}
+		);
+
+		this.server.tool(
+			"clock_convert_unixtime",
+			"Convert between a UTC ISO timestamp and a Unix timestamp (seconds since epoch).\n" +
+			"Examples:\n" +
+			'clock_convert_unixtime{"direction": "utc_to_unixtime", "value": "2025-06-15T12:00:00Z"}\n' +
+			'clock_convert_unixtime{"direction": "unixtime_to_utc", "value": "1749988800"}', {
+				direction: z.enum(["utc_to_unixtime", "unixtime_to_utc"])
+					.default("utc_to_unixtime")
+					.describe(
+						'Direction of conversion: "utc_to_unixtime" (default) or "unixtime_to_utc".'
+					),
+				value: z.string().describe(
+					'The value to convert: a UTC ISO 8601 string (e.g., "2025-06-15T12:00:00Z") ' +
+					'if direction is "utc_to_unixtime", or a Unix timestamp string (e.g., "1749988800") ' +
+					'if direction is "unixtime_to_utc".'
+				)
+			},
+			async ({
+				direction,
+				value
+			}) => {
+				try {
+					if (direction === "utc_to_unixtime") {
+						// Validate if 'value' is a valid ISO string for UTC
+						if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?Z$/.test(value)) {
+							throw new Error(`Invalid UTC ISO format for "value": ${value}. Expected YYYY-MM-DDTHH:MM(:SS)Z.`);
+						}
+						const inputDate = new Date(value);
+						if (Number.isNaN(inputDate.getTime())) {
+							throw new Error(`Invalid date from UTC ISO string: ${value}`);
+						}
+						const unixTimestamp = Math.floor(inputDate.getTime() / 1000);
+						return {
+							content: [{
+								type: "text",
+								text: JSON.stringify({
+									source_utc_iso: value,
+									unix_timestamp: unixTimestamp
+								}, null, 2)
+							}]
+						};
+					}
+					else { // direction === "unixtime_to_utc"
+						// Validate if 'value' is a valid Unix timestamp (integer seconds)
+						if (!/^\d+$/.test(value)) {
+							throw new Error(`Invalid Unix timestamp format for "value": ${value}. Expected positive integer (seconds since epoch).`);
+						}
+						const unixSeconds = parseInt(value, 10);
+						if (Number.isNaN(unixSeconds) || unixSeconds < 0) {
+							throw new Error(`Invalid Unix timestamp: ${value}. Must be a non-negative integer.`);
+						}
+						const convertedDate = new Date(unixSeconds * 1000);
+						if (Number.isNaN(convertedDate.getTime())) {
+							throw new Error(`Invalid Unix timestamp or unable to convert: ${value}`);
+						}
+						return {
+							content: [{
+								type: "text",
+								text: JSON.stringify({
+									source_unix_timestamp: unixSeconds,
+									utc_iso: convertedDate.toISOString()
+								}, null, 2)
+							}]
+						};
+					}
+				}
+				catch (e: any) {
+					const errorMessage = e instanceof Error ? e.message : String(e);
+					return {
+						content: [{
+							type: "text",
+							text: `Error in clock_convert_unixtime: ${errorMessage}`
 						}],
 						error: true
 					};
