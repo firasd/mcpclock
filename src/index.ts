@@ -28,12 +28,10 @@ const isValidIANATimeZone = (tz: string): boolean => {
 	}
 };
 
-
-// Define our MCP agent with tools
 export class MyMCP extends McpAgent {
 	server = new McpServer({
 		name: "MCP Clock",
-		version: "2025_Q9Z0",
+		version: "2025_R9A7",
 	});
 
 	async init() {
@@ -166,6 +164,74 @@ export class MyMCP extends McpAgent {
 						content: [{
 							type: "text",
 							text: `Error in clock_get: ${errorMessage}`
+						}],
+						error: true
+					};
+				}
+			}
+		);
+
+		this.server.tool(
+			"clock_day_info",
+			"Get day information for a date (YYYY-MM-DD format).\n" +
+			'E.g.: clock_day_info{"date": "2025-09-09"}', {
+				date: z.string()
+					.regex(/^\d{4}-\d{2}-\d{2}$/)
+					.describe('Date in YYYY-MM-DD format (e.g., "2025-09-09")')
+			},
+			async ({
+				date
+			}) => {
+				try {
+					const dateObj = new Date(date + "T00:00:00.000Z");
+					const year = dateObj.getUTCFullYear();
+					const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+					const daysInYear = isLeapYear ? 366 : 365;
+
+					// Day of year calculation
+					const startOfYear = new Date(Date.UTC(year, 0, 1));
+					const dayOfYear = Math.floor((dateObj.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+					// Year progress as rough percentage
+					const yearProgress = Math.round((dayOfYear / daysInYear) * 100);
+
+					const weekdayName = new Intl.DateTimeFormat("en-US", {
+						weekday: "long",
+						timeZone: "UTC"
+					}).format(dateObj);
+
+					// ISO week calculation (simplified)
+					const tempDate = new Date(dateObj);
+					const dayOfWeek = (tempDate.getUTCDay() + 6) % 7; // Monday = 0
+					tempDate.setUTCDate(tempDate.getUTCDate() - dayOfWeek + 3); // Thursday of this week
+					const yearStart = new Date(Date.UTC(tempDate.getUTCFullYear(), 0, 4));
+					const yearStartDay = (yearStart.getUTCDay() + 6) % 7;
+					yearStart.setUTCDate(yearStart.getUTCDate() - yearStartDay + 3);
+					const isoWeek = Math.floor((tempDate.getTime() - yearStart.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+
+					// Days in this month
+					const daysInMonth = new Date(Date.UTC(year, dateObj.getUTCMonth() + 1, 0)).getUTCDate();
+
+					return {
+						content: [{
+							type: "text",
+							text: JSON.stringify({
+								date,
+								weekday: weekdayName,
+								days_in_month: daysInMonth,
+								day_of_year: dayOfYear,
+								days_in_year: daysInYear,
+								year_progress_pct: yearProgress,
+								iso_week: isoWeek
+							}, null, 2)
+						}]
+					};
+				}
+				catch (e: any) {
+					return {
+						content: [{
+							type: "text",
+							text: `Error in clock_day_info: ${e.message}`
 						}],
 						error: true
 					};
