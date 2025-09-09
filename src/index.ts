@@ -173,34 +173,49 @@ export class MyMCP extends McpAgent {
 
 		this.server.tool(
 			"clock_day_info",
-			"Get day information for a date (YYYY-MM-DD format).\n" +
-			'E.g.: clock_day_info{"date": "2025-09-09"}', {
-				date: z.string()
+			"Return day information for a UTC date. If no date is provided, defaults to *today* (UTC).\n" +
+			"Returns: date, weekday, days_in_month, day_of_year, days_in_year, year_progress_pct, iso_week.\n" +
+			"Examples:\n" +
+			"  • clock_day_info{}\n" +
+			'  • clock_day_info{"date":"2025-09-09"}', {
+				date: z
+					.string()
 					.regex(/^\d{4}-\d{2}-\d{2}$/)
-					.describe('Date in YYYY-MM-DD format (e.g., "2025-09-09")')
+					.optional()
+					.describe('Date in YYYY-MM-DD format (e.g., "2025-09-09"). Defaults to today in UTC if omitted.')
 			},
 			async ({
 				date
 			}) => {
 				try {
-					const dateObj = new Date(date + "T00:00:00.000Z");
+					// Resolve to YYYY-MM-DD in UTC (today if not provided)
+					const toUTCDateStr = (d: Date) => {
+						const y = d.getUTCFullYear();
+						const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+						const da = String(d.getUTCDate()).padStart(2, "0");
+						return `${y}-${m}-${da}`;
+					};
+					const resolvedDate = date ?? toUTCDateStr(new Date());
+
+					const dateObj = new Date(resolvedDate + "T00:00:00.000Z");
 					const year = dateObj.getUTCFullYear();
 					const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
 					const daysInYear = isLeapYear ? 366 : 365;
 
-					// Day of year calculation
+					// Day of year
 					const startOfYear = new Date(Date.UTC(year, 0, 1));
-					const dayOfYear = Math.floor((dateObj.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+					const dayOfYear =
+						Math.floor((dateObj.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-					// Year progress as rough percentage
+					// Year progress (rough %)
 					const yearProgress = Math.round((dayOfYear / daysInYear) * 100);
 
 					const weekdayName = new Intl.DateTimeFormat("en-US", {
 						weekday: "long",
-						timeZone: "UTC"
+						timeZone: "UTC",
 					}).format(dateObj);
 
-					// ISO week calculation (simplified)
+					// ISO week (simplified)
 					const tempDate = new Date(dateObj);
 					const dayOfWeek = (tempDate.getUTCDay() + 6) % 7; // Monday = 0
 					tempDate.setUTCDate(tempDate.getUTCDate() - dayOfWeek + 3); // Thursday of this week
@@ -216,15 +231,18 @@ export class MyMCP extends McpAgent {
 						content: [{
 							type: "text",
 							text: JSON.stringify({
-								date,
-								weekday: weekdayName,
-								days_in_month: daysInMonth,
-								day_of_year: dayOfYear,
-								days_in_year: daysInYear,
-								year_progress_pct: yearProgress,
-								iso_week: isoWeek
-							}, null, 2)
-						}]
+									date: resolvedDate,
+									weekday: weekdayName,
+									days_in_month: daysInMonth,
+									day_of_year: dayOfYear,
+									days_in_year: daysInYear,
+									year_progress_pct: yearProgress,
+									iso_week: isoWeek,
+								},
+								null,
+								2
+							),
+						}, ],
 					};
 				}
 				catch (e: any) {
@@ -233,7 +251,7 @@ export class MyMCP extends McpAgent {
 							type: "text",
 							text: `Error in clock_day_info: ${e.message}`
 						}],
-						error: true
+						error: true,
 					};
 				}
 			}
