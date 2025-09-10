@@ -694,6 +694,101 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
+		this.server.tool(
+			"clock_delta_alphadec",
+			"Calculate the time difference between two 4-character AlphaDec timestamps within the current year. " +
+			"Implicitly uses current year and _000000 millisecond suffix. " +
+			"Example: clock_delta_alphadec{\"alphadec_start\":\"A2B3\",\"alphadec_end\":\"C1Y9\"}", {
+				alphadec_start: z
+					.string()
+					.regex(/^[A-Z]\d[A-Z]\d$/, "Must be a valid 4-character AlphaDec code, e.g., A2B3."),
+				alphadec_end: z
+					.string()
+					.regex(/^[A-Z]\d[A-Z]\d$/, "Must be a valid 4-character AlphaDec code, e.g., C1Y9."),
+			},
+			async ({
+				alphadec_start,
+				alphadec_end
+			}) => {
+				try {
+					const currentYear = new Date().getUTCFullYear();
+
+					// Construct full canonical strings and decode
+					const full_start = `${currentYear}_${alphadec_start}_000000`;
+					const full_end = `${currentYear}_${alphadec_end}_000000`;
+
+					const date_start = alphadec.decode(full_start);
+					const date_end = alphadec.decode(full_end);
+
+					if (Number.isNaN(date_start.getTime()) || Number.isNaN(date_end.getTime())) {
+						throw new Error("Failed to decode one or both AlphaDec codes for the current year.");
+					}
+
+					// Calculate ISO time difference
+					const delta_ms = date_end.getTime() - date_start.getTime();
+					const total_seconds = Math.abs(delta_ms) / 1000;
+					const sign = delta_ms < 0 ? "-" : "";
+
+					const hours = Math.floor(total_seconds / 3600);
+					const minutes = Math.floor((total_seconds % 3600) / 60);
+					const seconds = Math.floor(total_seconds % 60);
+					const iso_delta = `${sign}${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+					// Calculate AlphaDec unit difference
+					const beats_in_arc = 260; // 26 bars * 10 beats
+					const beats_in_period = 2600; // 10 arcs * 260 beats
+
+					const alphadecToBeats = (code: string): number => {
+						const [p_char, a_char, b_char, t_char] = code;
+						const p_idx = p_char.charCodeAt(0) - 65; // 'A' = 65
+						const a_val = parseInt(a_char, 10);
+						const b_idx = b_char.charCodeAt(0) - 65;
+						const t_val = parseInt(t_char, 10);
+
+						return p_idx * beats_in_period + a_val * beats_in_arc + b_idx * 10 + t_val;
+					};
+
+					const delta_beats = alphadecToBeats(alphadec_end) - alphadecToBeats(alphadec_start);
+					const adec_sign = delta_beats < 0 ? "-" : "";
+					let remaining = Math.abs(delta_beats);
+
+					const periods = Math.floor(remaining / beats_in_period);
+					remaining %= beats_in_period;
+					const arcs = Math.floor(remaining / beats_in_arc);
+					remaining %= beats_in_arc;
+					const bars = Math.floor(remaining / 10);
+					const beats = remaining % 10;
+
+					const alphadec_delta = `${adec_sign}${String(periods).padStart(2, "0")}:${String(arcs).padStart(2, "0")}:${String(bars).padStart(2, "0")}:${String(beats).padStart(2, "0")}`;
+
+					const breakdown = delta_beats < 0 ?
+						`Negative difference of ${periods} period(s), ${arcs} arc(s), ${bars} bar(s), ${beats} beat(s)` :
+						`${periods} period(s), ${arcs} arc(s), ${bars} bar(s), ${beats} beat(s)`;
+
+					return {
+						content: [{
+							type: "text",
+							text: JSON.stringify({
+								iso_time_difference: iso_delta,
+								alphadec_unit_delta: alphadec_delta,
+								breakdown: breakdown
+							}, null, 2)
+						}],
+					};
+
+				}
+				catch (e: any) {
+					return {
+						content: [{
+							type: "text",
+							text: `Error in clock_delta_alphadec: ${e.message}`
+						}],
+						error: true,
+					};
+				}
+			}
+		);
+
 
 	}
 }
