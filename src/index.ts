@@ -31,7 +31,7 @@ const isValidIANATimeZone = (tz: string): boolean => {
 export class MyMCP extends McpAgent {
 	server = new McpServer({
 		name: "MCP Clock",
-		version: "2025_R9A7",
+		version: "2025_S1N6",
 	});
 
 	async init() {
@@ -563,65 +563,77 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
+
 		this.server.tool(
 			"clock_delta_utc",
 			"Calculate the time difference between two UTC ISO timestamps.\n" +
+			"At least one of 'start' or 'end' must be provided. " +
+			"If 'start' is omitted, the current time is used. If 'end' is omitted, the current time is used.\n" +
+			"Returns a negative delta if the start time is after the end time.\n" +
 			"Examples:\n" +
-			'clock_delta_utc{"start": "2022-01-15T10:30:00Z", "end": "2025-08-31T14:45:30Z"}\n' +
-			'clock_delta_utc{"start": "1963-11-22T18:30:00Z", "end": "2025-08-31T14:30:00Z"}\n\n' +
-			"Returns time difference as years + remaining days + hours/minutes/seconds.", {
+			'  • clock_delta_utc{"start": "2022-01-15T10:30:00Z"} // time since that date\n' +
+			'  • clock_delta_utc{"end": "2025-12-31T23:59:59Z"} // time until that date\n' +
+			'  • clock_delta_utc{"start": "2022-01-15T10:30:00Z", "end": "2025-08-31T14:45:30Z"}', {
 				start: z
 					.string()
-					.describe('Start UTC ISO timestamp (e.g., "2022-01-15T10:30:00Z")'),
+					.optional()
+					.describe('Optional start UTC ISO timestamp (e.g., "2022-01-15T10:30:00Z")'),
 				end: z
 					.string()
-					.describe('End UTC ISO timestamp (e.g., "2025-08-31T14:45:30Z")'),
+					.optional()
+					.describe('Optional end UTC ISO timestamp (e.g., "2025-08-31T14:45:30Z")'),
 			},
 			async ({
 				start,
 				end
 			}) => {
 				try {
-					// Validate ISO formats: YYYY-MM-DDTHH:MM:SSZ 
-					const ISO_UTC_SECONDS_RE =
-						/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
-
-					if (!ISO_UTC_SECONDS_RE.test(start)) {
-						throw new Error(
-							`Invalid start UTC ISO format: ${start}. Expected YYYY-MM-DDTHH:MM:SSZ.`
-						);
-					}
-					if (!ISO_UTC_SECONDS_RE.test(end)) {
-						throw new Error(
-							`Invalid end UTC ISO format: ${end}. Expected YYYY-MM-DDTHH:MM:SSZ.`
-						);
+					// 1. Handle optional parameters
+					if (!start && !end) {
+						throw new Error("At least one of 'start' or 'end' must be provided.");
 					}
 
-					const startDate = new Date(start);
-					const endDate = new Date(end);
+					const now = new Date();
+					// Format 'now' to match the required YYYY-MM-DDTHH:MM:SSZ format
+					const nowStr = now.toISOString().slice(0, 19) + 'Z';
+
+					const resolvedStart = start || nowStr;
+					const resolvedEnd = end || nowStr;
+
+					// 2. Validate format (can be kept as is)
+					const ISO_UTC_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+					if (!ISO_UTC_SECONDS_RE.test(resolvedStart)) {
+						throw new Error(`Invalid start UTC ISO format: ${resolvedStart}.`);
+					}
+					if (!ISO_UTC_SECONDS_RE.test(resolvedEnd)) {
+						throw new Error(`Invalid end UTC ISO format: ${resolvedEnd}.`);
+					}
+
+					const startDate = new Date(resolvedStart);
+					const endDate = new Date(resolvedEnd);
 
 					if (Number.isNaN(startDate.getTime())) {
-						throw new Error(`Invalid start date: ${start}`);
+						throw new Error(`Invalid start date: ${resolvedStart}`);
 					}
 					if (Number.isNaN(endDate.getTime())) {
-						throw new Error(`Invalid end date: ${end}`);
+						throw new Error(`Invalid end date: ${resolvedEnd}`);
 					}
 
-					// Ensure start <= end
-					if (startDate.getTime() > endDate.getTime()) {
-						throw new Error(`Start date ${start} is after end date ${end}`);
-					}
-
-					// Calculate total difference in milliseconds
+					// 3. Calculate total difference (this will determine the sign)
 					const totalMs = endDate.getTime() - startDate.getTime();
+					const sign = totalMs < 0 ? -1 : 1;
 
-					// Years: count complete calendar years from start date
+					// For the breakdown, always calculate from earlier to later date
+					const earlierDate = sign === 1 ? startDate : endDate;
+					const laterDate = sign === 1 ? endDate : startDate;
+
+					// 4. Reuse your proven breakdown logic with the ordered dates
 					let years = 0;
-					let cursor = new Date(startDate);
+					let cursor = new Date(earlierDate);
 					while (true) {
 						const next = new Date(cursor);
 						next.setUTCFullYear(next.getUTCFullYear() + 1);
-						if (next.getTime() <= endDate.getTime()) {
+						if (next.getTime() <= laterDate.getTime()) {
 							years++;
 							cursor = next;
 						}
@@ -630,25 +642,20 @@ export class MyMCP extends McpAgent {
 						}
 					}
 
-					// Remaining time after full years
-					let remainingMs = endDate.getTime() - cursor.getTime();
-
+					let remainingMs = laterDate.getTime() - cursor.getTime();
 					const MS_DAY = 1000 * 60 * 60 * 24;
 					const MS_HOUR = 1000 * 60 * 60;
 					const MS_MIN = 1000 * 60;
 
 					const days = Math.floor(remainingMs / MS_DAY);
 					remainingMs %= MS_DAY;
-
 					const hours = Math.floor(remainingMs / MS_HOUR);
 					remainingMs %= MS_HOUR;
-
 					const minutes = Math.floor(remainingMs / MS_MIN);
 					remainingMs %= MS_MIN;
-
 					const seconds = Math.floor(remainingMs / 1000);
 
-					// Format readable string 
+					// 5. Format readable string with the correct sign
 					const parts: string[] = [];
 					if (years > 0) parts.push(`${years} year${years !== 1 ? "s" : ""}`);
 					if (days > 0) parts.push(`${days} day${days !== 1 ? "s" : ""}`);
@@ -657,14 +664,16 @@ export class MyMCP extends McpAgent {
 					if (seconds > 0 || parts.length === 0)
 						parts.push(`${seconds} second${seconds !== 1 ? "s" : ""}`);
 
-					const readable = parts.join(", ");
+					const readablePrefix = sign < 0 ? "Negative difference of " : "";
+					const readable = readablePrefix + parts.join(", ");
 
 					return {
 						content: [{
 							type: "text",
 							text: JSON.stringify({
-									start_utc_iso: start,
-									end_utc_iso: end,
+									start_utc_iso: resolvedStart,
+									end_utc_iso: resolvedEnd,
+									// total_seconds will correctly be negative or positive
 									total_seconds: Math.floor(totalMs / 1000),
 									breakdown: {
 										years,
@@ -693,7 +702,6 @@ export class MyMCP extends McpAgent {
 				}
 			}
 		);
-
 		this.server.tool(
 			"clock_delta_alphadec",
 			"Calculate the time difference between two 4-character AlphaDec timestamps within the current year. " +
@@ -805,8 +813,8 @@ export default {
 			return MyMCP.serve("/mcp").fetch(request, env, ctx);
 		}
 
-		return new Response("Not found", {
-			status: 404
+		return new Response("MCP Clock: Welcome!", {
+			status: 200
 		});
 	},
 };
