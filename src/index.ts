@@ -704,26 +704,49 @@ export class MyMCP extends McpAgent {
 		);
 		this.server.tool(
 			"clock_delta_alphadec",
-			"Calculate the time difference between two 4-character AlphaDec timestamps within the current year. " +
-			"Implicitly uses current year and _000000 millisecond suffix. " +
-			"Example: clock_delta_alphadec{\"alphadec_start\":\"A2B3\",\"alphadec_end\":\"C1Y9\"}", {
+			"Calculate the time difference between two 4-character AlphaDec timestamps within the current year.\n" +
+			"At least one of 'alphadec_start' or 'alphadec_end' must be provided. " +
+			"If one is omitted, the current time is used.\n" +
+			"Implicitly uses current year and _000000 millisecond suffix for calculations.\n" +
+			"Examples:\n" +
+			'  • clock_delta_alphadec{"alphadec_start":"A2B3"} // time since A2B3 this year\n' +
+			'  • clock_delta_alphadec{"alphadec_end":"Z8Y9"} // time until Z8Y9 this year\n' +
+			'  • clock_delta_alphadec{"alphadec_start":"A2B3","alphadec_end":"C1Y9"}', {
 				alphadec_start: z
 					.string()
-					.regex(/^[A-Z]\d[A-Z]\d$/, "Must be a valid 4-character AlphaDec code, e.g., A2B3."),
+					.regex(/^[A-Z]\d[A-Z]\d$/, "Must be a valid 4-character AlphaDec code, e.g., A2B3.")
+					.optional()
+					.describe("Optional start AlphaDec code (e.g., 'A2B3'). Defaults to current time if omitted."),
 				alphadec_end: z
 					.string()
-					.regex(/^[A-Z]\d[A-Z]\d$/, "Must be a valid 4-character AlphaDec code, e.g., C1Y9."),
+					.regex(/^[A-Z]\d[A-Z]\d$/, "Must be a valid 4-character AlphaDec code, e.g., C1Y9.")
+					.optional()
+					.describe("Optional end AlphaDec code (e.g., 'C1Y9'). Defaults to current time if omitted."),
 			},
 			async ({
 				alphadec_start,
 				alphadec_end
 			}) => {
 				try {
-					const currentYear = new Date().getUTCFullYear();
+					if (!alphadec_start && !alphadec_end) {
+						throw new Error("At least one of 'alphadec_start' or 'alphadec_end' must be provided.");
+					}
+
+					const now = new Date();
+					const currentYear = now.getUTCFullYear();
+
+					// Helper to get the 4-char code from the current time
+					const getCurrentAlphadecCode = (): string => {
+						const canonicalNow = alphadec.encode(now).canonical; // e.g., "2024_K3T5_123456"
+						return canonicalNow.substring(5, 9); // e.g., "K3T5"
+					};
+
+					const resolved_start_code = alphadec_start || getCurrentAlphadecCode();
+					const resolved_end_code = alphadec_end || getCurrentAlphadecCode();
 
 					// Construct full canonical strings and decode
-					const full_start = `${currentYear}_${alphadec_start}_000000`;
-					const full_end = `${currentYear}_${alphadec_end}_000000`;
+					const full_start = `${currentYear}_${resolved_start_code}_000000`;
+					const full_end = `${currentYear}_${resolved_end_code}_000000`;
 
 					const date_start = alphadec.decode(full_start);
 					const date_end = alphadec.decode(full_end);
@@ -734,13 +757,15 @@ export class MyMCP extends McpAgent {
 
 					// Calculate ISO time difference
 					const delta_ms = date_end.getTime() - date_start.getTime();
-					const total_seconds = Math.abs(delta_ms) / 1000;
 					const sign = delta_ms < 0 ? "-" : "";
 
+					let total_seconds = Math.abs(delta_ms) / 1000;
 					const hours = Math.floor(total_seconds / 3600);
-					const minutes = Math.floor((total_seconds % 3600) / 60);
+					total_seconds %= 3600;
+					const minutes = Math.floor(total_seconds / 60);
 					const seconds = Math.floor(total_seconds % 60);
-					const iso_delta = `${sign}${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+					const iso_delta = `${sign}${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
 					// Calculate AlphaDec unit difference
 					const beats_in_arc = 260; // 26 bars * 10 beats
@@ -756,7 +781,7 @@ export class MyMCP extends McpAgent {
 						return p_idx * beats_in_period + a_val * beats_in_arc + b_idx * 10 + t_val;
 					};
 
-					const delta_beats = alphadecToBeats(alphadec_end) - alphadecToBeats(alphadec_start);
+					const delta_beats = alphadecToBeats(resolved_end_code) - alphadecToBeats(resolved_start_code);
 					const adec_sign = delta_beats < 0 ? "-" : "";
 					let remaining = Math.abs(delta_beats);
 
@@ -777,6 +802,8 @@ export class MyMCP extends McpAgent {
 						content: [{
 							type: "text",
 							text: JSON.stringify({
+								alphadec_start: resolved_start_code,
+								alphadec_end: resolved_end_code,
 								iso_time_difference: iso_delta,
 								alphadec_unit_delta: alphadec_delta,
 								breakdown: breakdown
