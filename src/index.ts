@@ -31,7 +31,7 @@ const isValidIANATimeZone = (tz: string): boolean => {
 export class MyMCP extends McpAgent {
 	server = new McpServer({
 		name: "MCP Clock",
-		version: "2025_S1N6",
+		version: "2025_U4Y4",
 	});
 
 	async init() {
@@ -751,6 +751,9 @@ export class MyMCP extends McpAgent {
 					const date_start = alphadec.decode(full_start);
 					const date_end = alphadec.decode(full_end);
 
+					const iso_utc_start = date_start.toISOString();
+					const iso_utc_end = date_end.toISOString();
+
 					if (Number.isNaN(date_start.getTime()) || Number.isNaN(date_end.getTime())) {
 						throw new Error("Failed to decode one or both AlphaDec codes for the current year.");
 					}
@@ -804,6 +807,8 @@ export class MyMCP extends McpAgent {
 							text: JSON.stringify({
 								alphadec_start: resolved_start_code,
 								alphadec_end: resolved_end_code,
+								iso_utc_start,
+      							iso_utc_end,
 								iso_time_difference: iso_delta,
 								alphadec_unit_delta: alphadec_delta,
 								breakdown: breakdown
