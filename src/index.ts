@@ -177,8 +177,6 @@ export class MyMCP extends McpAgent {
 				}
 			}
 		);
-	}
-}
 
 		this.server.tool(
 			"clock_day_info",
