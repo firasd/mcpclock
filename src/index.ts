@@ -1,19 +1,15 @@
 import {
 	McpAgent
-}
-from "agents/mcp";
+} from "agents/mcp";
 import {
 	McpServer
-}
-from "@modelcontextprotocol/sdk/server/mcp.js";
+} from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
 	z
-}
-from "zod";
+} from "zod";
 import {
 	alphadec
-}
-from "./lib/alphadec.js";
+} from "./lib/alphadec.js";
 
 const isValidIANATimeZone = (tz: string): boolean => {
 	if (!tz || typeof tz !== 'string' || tz.length < 2) return false;
@@ -35,30 +31,40 @@ export class MyMCP extends McpAgent {
 	});
 
 	async init() {
-		this.server.tool(
-			"clock_get",
-			`Returns time-of-day information for the requested time zones.\n` +
-			"Examples:\n" +
-			"  • clock_get{} // now, default UTC & Alphadec\n" +
-			'  • clock_get{"timezones":["Asia/Tokyo","America/New_York"]}\n' +
-			'  • clock_get{"timezones":["Asia/Kolkata"],"offsetSeconds":-3600}', {
-				timezones: z
-					.array(z.string())
-					.max(15)
-					.optional()
-					.describe(
-						'Array of IANA zones plus the literals "UTC" or "Alphadec".\n' +
-						'Defaults to ["UTC"].'
-					),
-				offsetSeconds: z
-					.number()
-					.int()
-					.optional()
-					.describe(
-						"Signed offset (in seconds) to apply before formatting.\n" +
-						'E.g. -86400 for "24 h ago", +60 for "one minute ahead".'
-					),
-				adec_canonical_only: z.enum(["true"]).optional().describe("Only show the canonical Alphadec string without format explanation.")
+		// We now use `registerTool`, which takes a single configuration object.
+		this.server.registerTool(
+			"clock_get", {
+				description: `Returns time-of-day information for the requested time zones.\n` +
+					"Examples:\n" +
+					"  • clock_get{} // now, default UTC & Alphadec\n" +
+					'  • clock_get{"timezones":["Asia/Tokyo","America/New_York"]}\n' +
+					'  • clock_get{"timezones":["Asia/Kolkata"],"offsetSeconds":-3600}',
+				inputSchema: {
+					timezones: z
+						.array(z.string())
+						.max(15)
+						.optional()
+						.describe(
+							'Array of IANA zones plus the literals "UTC" or "Alphadec".\n' +
+							'Defaults to ["UTC"].'
+						),
+					offsetSeconds: z
+						.number()
+						.int()
+						.optional()
+						.describe(
+							"Signed offset (in seconds) to apply before formatting.\n" +
+							'E.g. -86400 for "24 h ago", +60 for "one minute ahead".'
+						),
+					adec_canonical_only: z.enum(["true"]).optional().describe("Only show the canonical Alphadec string without format explanation.")
+				},
+
+				annotations: {
+					readOnlyHint: true,
+					destructiveHint: false,
+					idempotentHint: true,
+					openWorldHint: false
+				}
 			},
 			async ({
 				timezones,
@@ -161,15 +167,18 @@ export class MyMCP extends McpAgent {
 				catch (e: any) {
 					const errorMessage = e instanceof Error ? e.message : String(e);
 					return {
+						// Note: The standard MCP error property is `isError`.
+						isError: true,
 						content: [{
 							type: "text",
 							text: `Error in clock_get: ${errorMessage}`
-						}],
-						error: true
+						}]
 					};
 				}
 			}
 		);
+	}
+}
 
 		this.server.tool(
 			"clock_day_info",
