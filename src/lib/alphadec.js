@@ -69,6 +69,16 @@ export const alphadec = {
 		const year = Number(yStr);
 
 		const isLeap = ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0);
+
+		const msOffsetInBeat = Number(msStr);
+		const maxOffset = isLeap ? 467786 : 466508;
+		
+		if (msOffsetInBeat > maxOffset) {
+			throw new Error(
+				`AlphaDec ms offset out of bounds: ${msOffsetInBeat} (max ${maxOffset})`
+			);
+		}
+		
 		const daysInYear = isLeap ? 366 : 365;
 
 		const BEATS_IN_YEAR = 67600n;
