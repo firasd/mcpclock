@@ -63,7 +63,7 @@ export const alphadec = {
 
 	decode(canonical) {
 		const m = canonical.match(/^(\d{4})_([A-Z])(\d)([A-Z])(\d)_([0-9]{6})$/);
-		if (!m) throw new Error(`Bad AlphaDec canonical string: "${canon}"`);
+		if (!m) throw new Error(`Bad Alphadec canonical string: "${canonical}"`);
 
 		const [, yStr, pLtr, aStr, bLtr, tStr, msStr] = m;
 		const year = Number(yStr);
