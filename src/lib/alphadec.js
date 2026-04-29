@@ -43,7 +43,6 @@ export const alphadec = {
 		const canonicalMsPart = String(msOffsetInBeat).padStart(6, "0");
 
 		const canonical = `${y}_${periodLetter}${a_val}${barLetter}${t_val}_${canonicalMsPart}`;
-		const readable = `${periodLetter}${a_val}:${barLetter}${t_val}`;
 
 		return {
 			canonical,
@@ -55,7 +54,6 @@ export const alphadec = {
 			msOffsetInBeat,
 			periodLetter,
 			barLetter,
-			readable,
 			arcStartMsInYear,
 			arcEndMsInYear
 		};

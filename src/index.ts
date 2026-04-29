@@ -56,7 +56,7 @@ export class MyMCP extends McpAgent {
 							"Signed offset (in seconds) to apply before formatting.\n" +
 							'E.g. -86400 for "24 h ago", +60 for "one minute ahead".'
 						),
-					adec_canonical_only: z.enum(["true"]).optional().describe("Only show the canonical Alphadec string without format explanation.")
+					adec_canonical_only: z.enum(["true"]).optional().describe("Only show the canonical Alphadec string without the unit explanation preamble.")
 				},
 
 				annotations: {
@@ -147,14 +147,11 @@ export class MyMCP extends McpAgent {
 					entries.push({
 						timezone: "Alphadec",
 						alphadec: AlphadecData.canonical,
-						...((AlphadecExplicit && !suppressFullAlphadec) && {
-							readable: AlphadecData.readable
-						})
 					});
 					/* ── 4. respond ────────────────────────────────────────────────── */
 					let preamble = "";
 					if (AlphadecExplicit && !suppressFullAlphadec) {
-						preamble = "// Alphadec units (approx): Period (A-Z) ≈ 14.04 days (UTC yr (different length leap yr vs common yr) / 26) | Arc (0-9) ≈ 33.7 hours (Period / 10) | Bar (A-Z) ≈ 77.75 minutes (Arc / 26) | Beat (0-9) ≈ 7.78 minutes (Bar / 10). The final part of canonical Alphadec is milliseconds offset within the beat.'\n";
+						preamble = "// Alphadec units (approx): Period (A-Z) ≈ 14.04 days (UTC yr / 26) | Arc (0-9) ≈ 33.7 hours (Period / 10) | Bar (A-Z) ≈ 77.75 minutes (Arc / 26) | Beat (0-9) ≈ 7.78 minutes (Bar / 10). Suffix is ms offset within the beat.\n";
 					}
 
 					return {
