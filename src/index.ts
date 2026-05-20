@@ -27,7 +27,7 @@ const isValidIANATimeZone = (tz: string): boolean => {
 export class MyMCP extends McpAgent {
 	server = new McpServer({
 		name: "MCP Clock",
-		version: "2025_U4Y4",
+		version: "2026_J9E4",
 	});
 
 	async init() {
@@ -108,6 +108,23 @@ export class MyMCP extends McpAgent {
 							continue;
 						}
 						if (tz !== "UTC") {
+
+							const tzParts = new Intl.DateTimeFormat("en-US", {
+							  timeZone: tz,
+							  timeZoneName: "short"
+							}).formatToParts(target);
+							
+							const offsetParts = new Intl.DateTimeFormat("en-US", {
+							  timeZone: tz,
+							  timeZoneName: "shortOffset"
+							}).formatToParts(target);
+							
+							const tzAbbrev =
+							  tzParts.find(p => p.type === "timeZoneName")?.value;
+							
+							const utcOffset =
+							  offsetParts.find(p => p.type === "timeZoneName")?.value;
+														
 							entries.push({
 								timezone: tz,
 								time12: new Intl.DateTimeFormat("en-US", {
@@ -131,7 +148,9 @@ export class MyMCP extends McpAgent {
 									month: "short",
 									day: "numeric",
 									timeZone: tz
-								}).format(target)
+								}).format(target),
+								tz_abbrev: tzAbbrev,
+								utc_offset: utcOffset,
 							});
 						}
 					}
