@@ -586,33 +586,41 @@ function createServer() {
 		);
 
 
-		server.tool(
-			"clock_shift_utc",
-			"Shift a single UTC ISO timestamp forward or backward by a structured time delta.\n" +
-			"If moment is omitted, the current UTC time is used. Missing delta fields default to zero.\n" +
-			"Uses UTC calendar-year movement for years, then applies days/hours/minutes/seconds on the UTC timeline.\n" +
-			"Examples:\n" +
-			'  • clock_shift_utc{"delta":{"days":35}}\n' +
-			'  • clock_shift_utc{"moment":"2026-02-28T12:00:00Z","direction":"after","delta":{"years":1}}\n' +
-			'  • clock_shift_utc{"moment":"2026-05-28T10:00:00Z","direction":"before","delta":{"seconds":3600}}', {
-				moment: z
-					.string()
-					.optional()
-					.describe('Optional UTC ISO timestamp (e.g., "2026-05-28T10:00:00Z"). Defaults to current UTC time.'),
-				direction: z
-					.enum(["after", "before"])
-					.optional()
-					.describe('Shift direction. Defaults to "after".'),
-				delta: z
-					.object({
-						years: z.number().int().nonnegative().optional(),
-						days: z.number().int().nonnegative().optional(),
-						hours: z.number().int().nonnegative().optional(),
-						minutes: z.number().int().nonnegative().optional(),
-						seconds: z.number().int().nonnegative().optional(),
-					})
-					.optional()
-					.describe("Structured non-negative integer delta. Missing fields default to zero."),
+		server.registerTool(
+			"clock_shift_utc", {
+				description: "Shift a single UTC ISO timestamp forward or backward by a structured time delta.\n" +
+					"If moment is omitted, the current UTC time is used. Missing delta fields default to zero.\n" +
+					"Uses UTC calendar-year movement for years, then applies days/hours/minutes/seconds on the UTC timeline.\n" +
+					"Examples:\n" +
+					'  • clock_shift_utc{"delta":{"days":35}}\n' +
+					'  • clock_shift_utc{"moment":"2026-02-28T12:00:00Z","direction":"after","delta":{"years":1}}\n' +
+					'  • clock_shift_utc{"moment":"2026-05-28T10:00:00Z","direction":"before","delta":{"seconds":3600}}',
+				inputSchema: {
+					moment: z
+						.string()
+						.optional()
+						.describe('Optional UTC ISO timestamp (e.g., "2026-05-28T10:00:00Z"). Defaults to current UTC time.'),
+					direction: z
+						.enum(["after", "before"])
+						.optional()
+						.describe('Shift direction. Defaults to "after".'),
+					delta: z
+						.object({
+							years: z.number().int().nonnegative().optional(),
+							days: z.number().int().nonnegative().optional(),
+							hours: z.number().int().nonnegative().optional(),
+							minutes: z.number().int().nonnegative().optional(),
+							seconds: z.number().int().nonnegative().optional(),
+						})
+						.optional()
+						.describe("Structured non-negative integer delta. Missing fields default to zero."),
+				},
+				annotations: {
+					readOnlyHint: true,
+					destructiveHint: false,
+					idempotentHint: true,
+					openWorldHint: false
+				}
 			},
 			async ({
 				moment,
