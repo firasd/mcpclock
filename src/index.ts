@@ -193,18 +193,26 @@ function createServer() {
 			}
 		);
 
-		server.tool(
-			"clock_day_info",
-			"Return day information for a UTC date. If no date is provided, defaults to *today* (UTC).\n" +
-			"Returns: date, weekday, days_in_month, day_of_year, days_in_year, year_progress_pct, iso_week.\n" +
-			"Examples:\n" +
-			"  • clock_day_info{}\n" +
-			'  • clock_day_info{"date":"2025-09-09"}', {
-				date: z
-					.string()
-					.regex(/^\d{4}-\d{2}-\d{2}$/)
-					.optional()
-					.describe('Date in YYYY-MM-DD format (e.g., "2025-09-09"). Defaults to today in UTC if omitted.')
+		server.registerTool(
+			"clock_day_info", {
+				description: "Return day information for a UTC date. If no date is provided, defaults to *today* (UTC).\n" +
+					"Returns: date, weekday, days_in_month, day_of_year, days_in_year, year_progress_pct, iso_week, hijri_calendar.\n" +
+					"Examples:\n" +
+					"  • clock_day_info{}\n" +
+					'  • clock_day_info{"date":"2025-09-09"}',
+				inputSchema: {
+					date: z
+						.string()
+						.regex(/^\d{4}-\d{2}-\d{2}$/)
+						.optional()
+						.describe('Date in YYYY-MM-DD format (e.g., "2025-09-09"). Defaults to today in UTC if omitted.')
+				},
+				annotations: {
+					readOnlyHint: true,
+					destructiveHint: false,
+					idempotentHint: true,
+					openWorldHint: false
+				}
 			},
 			async ({
 				date
@@ -249,6 +257,14 @@ function createServer() {
 					// Days in this month
 					const daysInMonth = new Date(Date.UTC(year, dateObj.getUTCMonth() + 1, 0)).getUTCDate();
 
+					const formatHijriDate = (calendar: string) =>
+						new Intl.DateTimeFormat(`en-US-u-ca-${calendar}`, {
+							timeZone: "UTC",
+							year: "numeric",
+							month: "long",
+							day: "numeric",
+						}).format(dateObj);
+
 					return {
 						content: [{
 							type: "text",
@@ -260,6 +276,10 @@ function createServer() {
 									days_in_year: daysInYear,
 									year_progress_pct: yearProgress,
 									iso_week: isoWeek,
+									hijri_calendar: {
+										tabular: formatHijriDate("islamic-tbla"),
+										umm_al_qura: formatHijriDate("islamic-umalqura"),
+									},
 								},
 								null,
 								2
