@@ -587,6 +587,132 @@ function createServer() {
 
 
 		server.tool(
+			"clock_shift_utc",
+			"Shift a single UTC ISO timestamp forward or backward by a structured time delta.\n" +
+			"If moment is omitted, the current UTC time is used. Missing delta fields default to zero.\n" +
+			"Uses UTC calendar-year movement for years, then applies days/hours/minutes/seconds on the UTC timeline.\n" +
+			"Examples:\n" +
+			'  • clock_shift_utc{"delta":{"days":35}}\n' +
+			'  • clock_shift_utc{"moment":"2026-02-28T12:00:00Z","direction":"after","delta":{"years":1}}\n' +
+			'  • clock_shift_utc{"moment":"2026-05-28T10:00:00Z","direction":"before","delta":{"seconds":3600}}', {
+				moment: z
+					.string()
+					.optional()
+					.describe('Optional UTC ISO timestamp (e.g., "2026-05-28T10:00:00Z"). Defaults to current UTC time.'),
+				direction: z
+					.enum(["after", "before"])
+					.optional()
+					.describe('Shift direction. Defaults to "after".'),
+				delta: z
+					.object({
+						years: z.number().int().nonnegative().optional(),
+						days: z.number().int().nonnegative().optional(),
+						hours: z.number().int().nonnegative().optional(),
+						minutes: z.number().int().nonnegative().optional(),
+						seconds: z.number().int().nonnegative().optional(),
+					})
+					.optional()
+					.describe("Structured non-negative integer delta. Missing fields default to zero."),
+			},
+			async ({
+				moment,
+				direction,
+				delta
+			}) => {
+				try {
+					const now = new Date();
+					const resolvedMoment = moment || now.toISOString().slice(0, 19) + "Z";
+					const resolvedDirection = direction || "after";
+
+					const ISO_UTC_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+					if (!ISO_UTC_SECONDS_RE.test(resolvedMoment)) {
+						throw new Error(`Invalid moment UTC ISO format: ${resolvedMoment}. Expected YYYY-MM-DDTHH:MM:SSZ.`);
+					}
+
+					const sourceDate = new Date(resolvedMoment);
+					if (Number.isNaN(sourceDate.getTime())) {
+						throw new Error(`Invalid moment date: ${resolvedMoment}`);
+					}
+
+					const years = delta?.years ?? 0;
+					const days = delta?.days ?? 0;
+					const hours = delta?.hours ?? 0;
+					const minutes = delta?.minutes ?? 0;
+					const seconds = delta?.seconds ?? 0;
+					const sign = resolvedDirection === "before" ? -1 : 1;
+
+					const shifted = new Date(sourceDate);
+					for (let i = 0; i < years; i++) {
+						shifted.setUTCFullYear(shifted.getUTCFullYear() + sign);
+					}
+
+					const MS_DAY = 1000 * 60 * 60 * 24;
+					const MS_HOUR = 1000 * 60 * 60;
+					const MS_MIN = 1000 * 60;
+					const smallerUnitMs =
+						days * MS_DAY +
+						hours * MS_HOUR +
+						minutes * MS_MIN +
+						seconds * 1000;
+
+					shifted.setTime(shifted.getTime() + sign * smallerUnitMs);
+
+					const normalizedTotalSeconds =
+						days * 24 * 60 * 60 +
+						hours * 60 * 60 +
+						minutes * 60 +
+						seconds;
+					let remainingSeconds = normalizedTotalSeconds;
+					const normalizedDays = Math.floor(remainingSeconds / (24 * 60 * 60));
+					remainingSeconds %= 24 * 60 * 60;
+					const normalizedHours = Math.floor(remainingSeconds / (60 * 60));
+					remainingSeconds %= 60 * 60;
+					const normalizedMinutes = Math.floor(remainingSeconds / 60);
+					const normalizedSeconds = remainingSeconds % 60;
+
+					return {
+						content: [{
+							type: "text",
+							text: JSON.stringify({
+									source_utc_iso: sourceDate.toISOString(),
+									direction: resolvedDirection,
+									input_delta: {
+										years,
+										days,
+										hours,
+										minutes,
+										seconds,
+									},
+									normalized_delta: {
+										years,
+										days: normalizedDays,
+										hours: normalizedHours,
+										minutes: normalizedMinutes,
+										seconds: normalizedSeconds,
+									},
+									shifted_utc_iso: shifted.toISOString(),
+									total_seconds_excluding_calendar_years: sign * normalizedTotalSeconds,
+								},
+								null,
+								2
+							),
+						}, ],
+					};
+				}
+				catch (e: any) {
+					const errorMessage = e instanceof Error ? e.message : String(e);
+					return {
+						content: [{
+							type: "text",
+							text: `Error in clock_shift_utc: ${errorMessage}`,
+						}, ],
+						error: true,
+					};
+				}
+			}
+		);
+
+		server.tool(
 			"clock_delta_utc",
 			"Calculate the time difference between two UTC ISO timestamps.\n" +
 			"At least one of 'start' or 'end' must be provided. " +
