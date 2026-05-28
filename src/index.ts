@@ -1,5 +1,5 @@
 import {
-	McpAgent
+	createMcpHandler
 } from "agents/mcp";
 import {
 	McpServer
@@ -24,15 +24,14 @@ const isValidIANATimeZone = (tz: string): boolean => {
 	}
 };
 
-export class MyMCP extends McpAgent {
-	server = new McpServer({
+function createServer() {
+	const server = new McpServer({
 		name: "MCP Clock",
 		version: "2026_J9E4",
 	});
 
-	async init() {
 		// We now use `registerTool`, which takes a single configuration object.
-		this.server.registerTool(
+		server.registerTool(
 			"clock_get", {
 				description: `Returns time-of-day information for the requested time zones.\n` +
 					"Examples:\n" +
@@ -194,7 +193,7 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		this.server.tool(
+		server.tool(
 			"clock_day_info",
 			"Return day information for a UTC date. If no date is provided, defaults to *today* (UTC).\n" +
 			"Returns: date, weekday, days_in_month, day_of_year, days_in_year, year_progress_pct, iso_week.\n" +
@@ -280,7 +279,7 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		this.server.tool(
+		server.tool(
 			"clock_convert",
 			"Convert a timestamp given in one zone (UTC or IANA) to one or more target zones (UTC or IANA).\n" +
 			"Examples:\n" +
@@ -433,7 +432,7 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		this.server.tool(
+		server.tool(
 			"clock_convert_alphadec",
 			"Convert between a UTC ISO timestamp and an Alphadec string.\n" +
 			"Examples:\n" +
@@ -507,7 +506,7 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		this.server.tool(
+		server.tool(
 			"clock_convert_unixtime",
 			"Convert between a UTC ISO timestamp and a Unix timestamp (seconds since epoch).\n" +
 			"Examples:\n" +
@@ -587,7 +586,7 @@ export class MyMCP extends McpAgent {
 		);
 
 
-		this.server.tool(
+		server.tool(
 			"clock_delta_utc",
 			"Calculate the time difference between two UTC ISO timestamps.\n" +
 			"At least one of 'start' or 'end' must be provided. " +
@@ -725,7 +724,7 @@ export class MyMCP extends McpAgent {
 				}
 			}
 		);
-		this.server.tool(
+		server.tool(
 			"clock_delta_alphadec",
 			"Calculate the time difference between two 4-character AlphaDec timestamps within the current year.\n" +
 			"At least one of 'alphadec_start' or 'alphadec_end' must be provided. " +
@@ -852,20 +851,16 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-
-	}
+	return server;
 }
 
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
 		const url = new URL(request.url);
 
-		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
-			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
-		}
-
 		if (url.pathname === "/mcp") {
-			return MyMCP.serve("/mcp").fetch(request, env, ctx);
+			const server = createServer();
+			return createMcpHandler(server)(request, env, ctx);
 		}
 
 		return new Response("MCP Clock: Welcome!", {
