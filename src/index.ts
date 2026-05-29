@@ -605,7 +605,7 @@ function createServer() {
 			}
 		);
 
-this.server.registerTool(
+server.registerTool(
 	"clock_shift_utc", {
 		description: "Shift a UTC ISO timestamp forward or backward by a structured time delta.\n" +
 			"`date_from` is required; use the literal string \"NOW\" for the current UTC instant.\n" +
