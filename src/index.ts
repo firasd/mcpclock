@@ -657,7 +657,7 @@ server.registerTool(
 				resolvedMoment = now.toISOString().slice(0, 19) + "Z";
 			} else {
 				// Must be a valid full‑second UTC ISO string
-				const ISO_UTC_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+								const ISO_UTC_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?Z$/;
 				if (!ISO_UTC_SECONDS_RE.test(date_from)) {
 					throw new Error(
 						`Invalid date_from: "${date_from}". Expected "NOW" or YYYY-MM-DDTHH:MM:SSZ.`
@@ -790,7 +790,7 @@ server.registerTool(
 					const resolvedEnd = end || nowStr;
 
 					// 2. Validate format (can be kept as is)
-					const ISO_UTC_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+										const ISO_UTC_SECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?Z$/;
 					if (!ISO_UTC_SECONDS_RE.test(resolvedStart)) {
 						throw new Error(`Invalid start UTC ISO format: ${resolvedStart}.`);
 					}
