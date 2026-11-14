@@ -7,7 +7,7 @@ export interface ClockGetOptions {
 
 export type ClockEntry =
 	| { timezone: "UTC"; iso: string; unixtime: number }
-	| { timezone: "Alphadec"; alphadec: string }
+	| { timezone: "Alphadec"; alphadec: string; alphadec_info?: string }
 	| {
 			timezone: string;
 			time12: string;
@@ -184,6 +184,9 @@ export function clockGet({
 	entries.push({
 		timezone: "Alphadec",
 		alphadec: AlphadecData.canonical,
+		...(requestedZones.includes("Alphadec") ? {
+			alphadec_info: "Alphadec units (approx): Period (A-Z) ≈ 14.04 days (UTC yr / 26) | Arc (0-9) ≈ 33.7 hours (Period / 10) | Bar (A-Z) ≈ 77.75 minutes (Arc / 26) | Beat (0-9) ≈ 7.78 minutes (Bar / 10). Suffix is ms offset within the beat.",
+		} : {}),
 	});
 	return entries;
 }

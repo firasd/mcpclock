@@ -22,8 +22,8 @@ const distance = clockDeltaUtc({ end: expiry.shifted_utc_iso });
 Each function takes an options object using the tool's argument names and returns
 plain data, with no JSON serialization or MCP response envelope. Invalid inputs
 throw exceptions. `clockGet()` and `clockDayInfo()` can be called without options.
-The `adec_canonical_only` flag and Alphadec explanation preamble belong to the MCP
-adapter, so they are not part of the library API.
+Explicitly requesting `"Alphadec"` adds an `alphadec_info` explanation to its entry.
+The default response includes the canonical Alphadec value without that explanation.
 
 | MCP Tool | Library Export |
 |----------|----------------|
@@ -97,12 +97,12 @@ Returns current time in one or more time zones.
 
 - **`timezones`** *(optional)* — Array of IANA zone names (e.g. `"America/New_York"`) plus the special literals `"UTC"` and `"Alphadec"`. Defaults to `["UTC"]`. Max 15 zones.
 - **`offsetSeconds`** *(optional)* — Signed offset in seconds applied before formatting. E.g. `-86400` for 24 h ago, `+60` for one minute ahead.
-- **`adec_canonical_only`** *(optional)* — Pass `"true"` to suppress the Alphadec unit explanation and return only the canonical string.
+Explicitly including `"Alphadec"` adds an `alphadec_info` field to the Alphadec entry.
 
 ```json
 clock_get{}
 clock_get{"timezones": ["Asia/Tokyo", "America/New_York"]}
-clock_get{"timezones": ["Alphadec"], "adec_canonical_only": "true"}
+clock_get{"timezones": ["Alphadec"]}
 ```
 
 ---

@@ -11,6 +11,16 @@ import {
   clockDeltaAlphadec,
 } from "../src/mcpclock.ts";
 
+test("Alphadec explanation appears only when explicitly requested", () => {
+  for (const options of [{}, { timezones: [] }, { timezones: ["UTC", "Asia/Kolkata"] }]) {
+    const entry = clockGet(options).find(item => item.timezone === "Alphadec");
+    assert.equal(Object.hasOwn(entry, "alphadec_info"), false);
+  }
+  const result = clockGet({ timezones: ["Alphadec"] });
+  assert.match(result.find(item => item.timezone === "Alphadec").alphadec_info, /Alphadec units/);
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
+});
+
 test("clockGet returns plain data with UTC, requested zones, and Alphadec", (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-05-28T10:40:40.025Z") });
   const result = clockGet({ timezones: ["Asia/Kolkata", "UTC", "UTC"], offsetSeconds: -3600 });

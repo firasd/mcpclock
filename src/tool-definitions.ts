@@ -32,12 +32,6 @@ export const toolDefinitions = {
 					"Signed offset (in seconds) to apply before formatting.\n" +
 						'E.g. -86400 for "24 h ago", +60 for "one minute ahead".',
 				),
-			adec_canonical_only: z
-				.enum(["true"])
-				.optional()
-				.describe(
-					"Only show the canonical Alphadec string without the unit explanation preamble.",
-				),
 		}),
 		annotations: readOnlyAnnotations,
 	},

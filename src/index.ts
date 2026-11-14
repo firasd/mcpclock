@@ -11,7 +11,6 @@ import {
 	clockShiftUtc,
 	clockDeltaUtc,
 	clockDeltaAlphadec,
-	type ClockGetOptions,
 } from "./mcpclock.js";
 function mcpTool<T>(name: string, calculate: (args: T) => unknown) {
 	return async (args: T): Promise<CallToolResult> => {
@@ -30,31 +29,12 @@ function mcpTool<T>(name: string, calculate: (args: T) => unknown) {
 		}
 	};
 }
-async function clockGetResponse(
-	args: ClockGetOptions & {
-		adec_canonical_only?: "true";
-	},
-): Promise<CallToolResult> {
-	const result = await mcpTool("clock_get", clockGet)(args);
-	if (
-		!result.isError &&
-		args.timezones?.includes("Alphadec") &&
-		args.adec_canonical_only !== "true"
-	) {
-		const content = result.content[0];
-		if (content.type === "text")
-			content.text =
-				"// Alphadec units (approx): Period (A-Z) ≈ 14.04 days (UTC yr / 26) | Arc (0-9) ≈ 33.7 hours (Period / 10) | Bar (A-Z) ≈ 77.75 minutes (Arc / 26) | Beat (0-9) ≈ 7.78 minutes (Bar / 10). Suffix is ms offset within the beat.\n" +
-				content.text;
-	}
-	return result;
-}
 function createServer() {
 	const server = new McpServer({
 		name: "MCP Clock",
 		version: "2026_J9E4",
 	});
-	server.registerTool("clock_get", toolDefinitions.clock_get, clockGetResponse);
+	server.registerTool("clock_get", toolDefinitions.clock_get, mcpTool("clock_get", clockGet));
 	server.registerTool(
 		"clock_day_info",
 		toolDefinitions.clock_day_info,
