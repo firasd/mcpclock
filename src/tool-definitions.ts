@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MCPCLOCK_VERSION } from "./version.js";
 
 const readOnlyAnnotations = {
 	readOnlyHint: true,
@@ -126,63 +127,49 @@ export const toolDefinitions = {
 		}),
 		annotations: readOnlyAnnotations,
 	},
-	clock_shift_utc: {
+	clock_offset_utc: {
 		description:
-			"Shift a UTC ISO timestamp forward or backward by a structured time delta.\n" +
-			'`date_from` is required; use the literal string "NOW" for the current UTC instant.\n' +
-			"Missing delta fields default to zero. Uses UTC calendar‑year movement for years, then applies days/hours/minutes/seconds on the UTC timeline.\n" +
-			"Examples:\n" +
-			'  • clock_shift_utc{"date_from":"NOW","delta":{"days":35}}\n' +
-			'  • clock_shift_utc{"date_from":"2026-02-28T12:00:00Z","direction":"after","delta":{"years":1}}\n' +
-			'  • clock_shift_utc{"date_from":"2026-05-28T10:00:00Z","direction":"before","delta":{"seconds":3600}}',
+			'Measure the difference between UTC instants or shift an instant by a duration. moment_a defaults to NOW. target.type="moment" requires moment_b; target.type="duration" requires duration and optionally direction (after or before, default after). Moments accept UTC ISO timestamps or NOW. Years are applied one calendar year at a time before fixed days/hours/minutes/seconds, with Feb 29 rolling to March 1 in non-leap years. Both modes return moment_a, moment_b, signed total_seconds (rounded down to whole seconds), breakdown, and readable. Example: {"target":{"type":"duration","duration":{"days":35}}}. Example: {"target":{"type":"moment","moment_b":"2026-12-19T12:00:00Z"}}.',
 		inputSchema: z.object({
-			date_from: z
-				.string()
-				.describe(
-					'Required. Either the literal string "NOW" (for current UTC time) or a UTC ISO timestamp like "2026-05-28T10:00:00Z".',
-				),
-			direction: z
-				.enum(["after", "before"])
-				.optional()
-				.describe('Shift direction. Defaults to "after".'),
-			delta: z
-				.object({
-					years: z.number().int().nonnegative().optional(),
-					days: z.number().int().nonnegative().optional(),
-					hours: z.number().int().nonnegative().optional(),
-					minutes: z.number().int().nonnegative().optional(),
-					seconds: z.number().int().nonnegative().optional(),
-				})
-				.optional()
-				.describe(
-					"Structured non‑negative integer delta. Missing fields default to zero.",
-				),
-		}),
-		annotations: readOnlyAnnotations,
-	},
-	clock_delta_utc: {
-		description:
-			"Calculate the time difference between two UTC ISO timestamps.\n" +
-			"At least one of 'start' or 'end' must be provided. " +
-			"If 'start' is omitted, the current time is used. If 'end' is omitted, the current time is used.\n" +
-			"Returns a negative delta if the start time is after the end time.\n" +
-			"Examples:\n" +
-			'  • clock_delta_utc{"start": "2022-01-15T10:30:00Z"} // time since that date\n' +
-			'  • clock_delta_utc{"end": "2025-12-31T23:59:59Z"} // time until that date\n' +
-			'  • clock_delta_utc{"start": "2022-01-15T10:30:00Z", "end": "2025-08-31T14:45:30Z"}',
-		inputSchema: z.object({
-			start: z
+			moment_a: z
 				.string()
 				.optional()
-				.describe(
-					'Optional start UTC ISO timestamp (e.g., "2022-01-15T10:30:00Z")',
-				),
-			end: z
-				.string()
-				.optional()
-				.describe(
-					'Optional end UTC ISO timestamp (e.g., "2025-08-31T14:45:30Z")',
-				),
+				.describe("UTC ISO instant or NOW. Defaults to the current instant."),
+			target: z
+				.discriminatedUnion("type", [
+					z
+						.object({
+							type: z.literal("moment"),
+							moment_b: z
+								.string()
+								.describe(
+									"Second UTC ISO instant or NOW. Difference is moment_b minus moment_a.",
+								),
+						})
+						.strict(),
+					z
+						.object({
+							type: z.literal("duration"),
+							direction: z
+								.enum(["after", "before"])
+								.default("after")
+								.describe("Direction of movement from moment_a."),
+							duration: z
+								.object({
+									years: z.number().int().nonnegative().max(9999).optional(),
+									days: z.number().int().nonnegative().optional(),
+									hours: z.number().int().nonnegative().optional(),
+									minutes: z.number().int().nonnegative().optional(),
+									seconds: z.number().int().nonnegative().optional(),
+								})
+								.strict()
+								.describe(
+									"Non-negative integers; omitted units default to zero. Smaller units roll over.",
+								),
+						})
+						.strict(),
+				])
+				.describe("Supply either the second instant or a structured duration."),
 		}),
 		annotations: readOnlyAnnotations,
 	},
@@ -228,7 +215,7 @@ export const toolDefinitions = {
 				.string()
 				.optional()
 				.describe(
-					'Optional tool name, e.g., "clock_shift_utc". Defaults to all tools.',
+					'Optional tool name, e.g., "clock_offset_utc". Defaults to all tools.',
 				),
 		}),
 		annotations: readOnlyAnnotations,
@@ -247,6 +234,7 @@ export function getToolHelp({ tool }: { tool?: string } = {}) {
 		);
 	}
 	return {
+		version: MCPCLOCK_VERSION,
 		tools: matches.map(([name, definition]) => ({
 			name,
 			description: definition.description,

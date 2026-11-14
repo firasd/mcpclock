@@ -5,20 +5,22 @@ import { getToolHelp, toolDefinitions } from "../src/tool-definitions.ts";
 test("help lists every tool, including itself", () => {
   const { tools } = getToolHelp();
   assert.deepEqual(tools.map(tool => tool.name), Object.keys(toolDefinitions));
-  assert.equal(tools.length, 9);
+  assert.equal(tools.length, 8);
+  assert.ok(!tools.some(tool => ["clock_shift_utc", "clock_delta_utc"].includes(tool.name)));
   assert.equal(tools.find(tool => tool.name === "clock_help").inputSchema.properties.tool.type, "string");
 });
 
 test("focused help includes nested constraints and required parameters", () => {
-  const { tools } = getToolHelp({ tool: "clock_shift_utc" });
+  const { tools } = getToolHelp({ tool: "clock_offset_utc" });
   assert.equal(tools.length, 1);
-  assert.equal(tools[0].name, "clock_shift_utc");
+  assert.equal(tools[0].name, "clock_offset_utc");
   const schema = tools[0].inputSchema;
-  assert.deepEqual(schema.required, ["date_from"]);
-  assert.match(schema.properties.date_from.description, /NOW/);
-  assert.deepEqual(schema.properties.direction.enum, ["after", "before"]);
-  assert.equal(schema.properties.delta.properties.days.type, "integer");
-  assert.equal(schema.properties.delta.properties.days.minimum, 0);
+  assert.deepEqual(schema.required, ["target"]);
+  assert.match(schema.properties.moment_a.description, /NOW/);
+  const duration = schema.properties.target.oneOf.find(branch => branch.properties.type.const === "duration");
+  assert.deepEqual(duration.properties.direction.enum, ["after", "before"]);
+  assert.equal(duration.properties.duration.properties.days.type, "integer");
+  assert.equal(duration.properties.duration.properties.days.minimum, 0);
   assert.equal(tools[0].annotations.readOnlyHint, true);
 });
 

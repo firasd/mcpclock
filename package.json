@@ -5,6 +5,8 @@
 	"type": "module",
 	"license": "0BSD",
 	"scripts": {
+		"version:bump": "node scripts/bump-version.mjs",
+		"version:check": "node scripts/check-version.mjs",
 		"test": "node --experimental-strip-types --test test/*.test.mjs",
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",

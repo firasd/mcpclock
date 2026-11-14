@@ -12,11 +12,11 @@ It imports only the local `src/lib/alphadec.js` implementation and uses JavaScri
 library, include both files and preserve their relative paths.
 
 ```ts
-import { clockDayInfo, clockShiftUtc, clockDeltaUtc } from "./src/mcpclock";
+import { clockDayInfo, clockOffsetUtc } from "./src/mcpclock";
 
 const calendar = clockDayInfo({ date: "2026-05-28" });
-const expiry = clockShiftUtc({ date_from: "NOW", delta: { days: 35 } });
-const distance = clockDeltaUtc({ end: expiry.shifted_utc_iso });
+const expiry = clockOffsetUtc({ target: { type: "duration", duration: { days: 35 } } });
+const distance = clockOffsetUtc({ target: { type: "moment", moment_b: expiry.moment_b } });
 ```
 
 Each function takes an options object using the tool's argument names and returns
@@ -32,8 +32,7 @@ The default response includes the canonical Alphadec value without that explanat
 | `clock_convert` | `clockConvert` |
 | `clock_convert_alphadec` | `clockConvertAlphadec` |
 | `clock_convert_unixtime` | `clockConvertUnixtime` |
-| `clock_shift_utc` | `clockShiftUtc` |
-| `clock_delta_utc` | `clockDeltaUtc` |
+| `clock_offset_utc` | `clockOffsetUtc` |
 | `clock_delta_alphadec` | `clockDeltaAlphadec` |
 
 `src/tool-definitions.ts` supplies the MCP schemas, descriptions, and annotations;
@@ -48,6 +47,16 @@ installing dependencies. The library itself remains dependency-free apart from
 the local Alphadec implementation.
 
 ## MCP Runtime
+
+Run `npm run version:bump` before committing a release. Like lclip, the version
+uses the shared Alphadec encoder plus a UTC day/month suffix, for example
+`2026_W6G6_447072_14Nov`. The script has no npm dependencies and updates
+`src/version.js`, used by MCP server identity and the `clock_help` response.
+It is not run automatically during deployment.
+
+After deployment, `npm run version:check` compares the local version with
+`/tools/clock_help` and exits nonzero on a mismatch. An optional base URL can be
+passed with `npm run version:check -- http://127.0.0.1:8787`.
 
 The Worker uses MCP SDK v2 (`@modelcontextprotocol/server`), Cloudflare Agents,
 and Zod 4. `createMcpHandler` from `agents/mcp/server` receives the server factory
@@ -67,9 +76,9 @@ schemas as MCP. Arrays and objects are JSON-encoded; scalar strings stay strings
 
 ```bash
 curl 'https://mcpclock.firasd.workers.dev/tools/clock_get'
-curl -G 'https://mcpclock.firasd.workers.dev/tools/clock_shift_utc' \
-  --data-urlencode 'date_from=NOW' --data-urlencode 'delta={"days":35}'
-curl 'https://mcpclock.firasd.workers.dev/tools/help?tool=clock_shift_utc'
+curl -G 'https://mcpclock.firasd.workers.dev/tools/clock_offset_utc' \
+  --data-urlencode 'target={"type":"duration","duration":{"days":35}}'
+curl 'https://mcpclock.firasd.workers.dev/tools/help?tool=clock_offset_utc'
 ```
 
 All GET responses disable caching. Invalid inputs return 400, unknown paths 404,
@@ -84,7 +93,7 @@ required fields, defaults, enums, and numeric or array constraints.
 
 ```json
 clock_help{}
-clock_help{"tool": "clock_shift_utc"}
+clock_help{"tool": "clock_offset_utc"}
 ```
 
 Definitions live in `src/tool-definitions.ts`; the help response is generated
@@ -164,35 +173,18 @@ clock_convert_unixtime{"direction": "unixtime_to_utc", "value": "1749988800"}
 
 ---
 
-### `clock_shift_utc`
-Shifts a UTC ISO timestamp forward or backward by a structured time delta ("what date is 35 days from now?").
+### `clock_offset_utc`
+Measures a difference or shifts an instant, replacing `clock_shift_utc` and `clock_delta_utc`.
 
-- **`date_from`** — Required. Either the literal string `"NOW"` (current UTC instant) or a UTC ISO timestamp like `"2026-05-28T10:00:00Z"`.
-- **`direction`** *(optional)* — `"after"` (default) or `"before"`.
-- **`delta`** *(optional)* — Object with non-negative integer fields: `years`, `days`, `hours`, `minutes`, `seconds`. Missing fields default to zero.
+- `moment_a` (optional): UTC ISO timestamp or `NOW`; defaults to now.
+- `target`: either `{type: "moment", moment_b: "...Z"}` or `{type: "duration", direction: "after", duration: {days: 35}}`. Direction defaults to `after`; `before` moves backward.
+- Duration fields: non-negative integer years, days, hours, minutes, seconds. Missing units default to zero; smaller units roll over.
 
-Years move on the UTC calendar (so Feb 29 → Feb 28/Mar 1 behaviour follows the calendar), then days/hours/minutes/seconds are applied on the UTC timeline. Returns `source_utc_iso`, `shifted_utc_iso`, the `input_delta`, a `normalized_delta`, and `total_seconds_excluding_calendar_years`.
-
-```json
-clock_shift_utc{"date_from": "NOW", "delta": {"days": 35}}
-clock_shift_utc{"date_from": "2026-02-28T12:00:00Z", "direction": "after", "delta": {"years": 1}}
-clock_shift_utc{"date_from": "2026-05-28T10:00:00Z", "direction": "before", "delta": {"seconds": 3600}}
-```
-
----
-
-### `clock_delta_utc`
-Calculates the time difference between two UTC ISO timestamps. Omit either end to use the current time (i.e. "time since" or "time until").
-
-- **`start`** *(optional)* — UTC ISO timestamp (e.g. `"2022-01-15T10:30:00Z"`). Defaults to now.
-- **`end`** *(optional)* — UTC ISO timestamp. Defaults to now. At least one of `start` or `end` is required.
-
-Returns `total_seconds`, a `breakdown` (years/days/hours/minutes/seconds), and a `readable` string. Negative if start is after end.
+Both modes return `moment_a`, `moment_b`, signed `total_seconds` rounded down to whole seconds, calendar-year-aware `breakdown`, and `readable`. Milliseconds are retained in the instants. Years move sequentially before smaller units; leap-day shifts are not always exact inverses.
 
 ```json
-clock_delta_utc{"start": "2022-01-15T10:30:00Z"}
-clock_delta_utc{"end": "2025-12-31T23:59:59Z"}
-clock_delta_utc{"start": "2022-01-15T10:30:00Z", "end": "2025-08-31T14:45:30Z"}
+clock_offset_utc{"target":{"type":"duration","duration":{"days":35}}}
+clock_offset_utc{"target":{"type":"moment","moment_b":"2026-12-19T12:00:00Z"}}
 ```
 
 ---
@@ -233,8 +225,7 @@ clock_day_info
 clock_convert
 clock_convert_alphadec
 clock_convert_unixtime
-clock_shift_utc
-clock_delta_utc
+clock_offset_utc
 clock_delta_alphadec
 clock_help
 ```
@@ -259,7 +250,7 @@ data: {"result":{"content":[{"type":"text","text":"[\n  {\n    \"timezone\": \"U
 curl -s -X POST "https://mcpclock.firasd.workers.dev/mcp" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"clock_shift_utc","arguments":{"date_from":"NOW","delta":{"days":35}}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"clock_offset_utc","arguments":{"target":{"type":"duration","duration":{"days":35}}}}}' \
   | grep '^data:' | sed 's/^data: //' | jq -r '.result.content[0].text'
 ```
 

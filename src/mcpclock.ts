@@ -57,6 +57,71 @@ export interface ClockDeltaUtcOptions {
 	end?: string;
 }
 
+export interface ClockOffsetUtcOptions {
+	moment_a?: string;
+	target:
+		| { type: "moment"; moment_b: string }
+		| { type: "duration"; direction?: "after" | "before"; duration: UtcDelta };
+}
+
+/** Supply a second instant or a duration; return both instants and their difference. */
+export function clockOffsetUtc({ moment_a, target }: ClockOffsetUtcOptions) {
+	const now = new Date().toISOString();
+	const resolveMoment = (value: string): string => {
+		if (value === "NOW") return now;
+		if (
+			typeof value !== "string" ||
+			!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?Z$/.test(value)
+		) {
+			throw new Error('Expected a UTC ISO timestamp ending in Z, or "NOW".');
+		}
+		const date = new Date(value);
+		if (
+			!Number.isFinite(date.getTime()) ||
+			date.toISOString().slice(0, 10) !== value.slice(0, 10)
+		) {
+			throw new Error(`Invalid UTC instant: ${value}`);
+		}
+		return date.toISOString();
+	};
+	const a = resolveMoment(moment_a ?? "NOW");
+	let b: string;
+	if (target?.type === "moment") {
+		if ("duration" in target || "direction" in target)
+			throw new Error("Supply either a moment or a duration, not both.");
+		b = resolveMoment(target.moment_b);
+	} else if (target?.type === "duration") {
+		if ("moment_b" in target)
+			throw new Error("Supply either a moment or a duration, not both.");
+		if (
+			!target.duration ||
+			typeof target.duration !== "object" ||
+			Array.isArray(target.duration)
+		)
+			throw new Error("duration must be an object.");
+		if ((target.duration.years ?? 0) > 9999)
+			throw new Error(
+				"Calendar-year shift is outside the supported year range (0000-9999).",
+			);
+		b = clockShiftUtc({
+			date_from: a,
+			direction: target.direction,
+			delta: target.duration,
+		}).shifted_utc_iso;
+		b = resolveMoment(b);
+	} else {
+		throw new Error('target.type must be "moment" or "duration".');
+	}
+	const difference = clockDeltaUtc({ start: a, end: b });
+	return {
+		moment_a: a,
+		moment_b: b,
+		total_seconds: difference.total_seconds,
+		breakdown: difference.breakdown,
+		readable: difference.readable,
+	};
+}
+
 export interface ClockDeltaAlphadecOptions {
 	alphadec_start?: string;
 	alphadec_end?: string;
@@ -184,9 +249,12 @@ export function clockGet({
 	entries.push({
 		timezone: "Alphadec",
 		alphadec: AlphadecData.canonical,
-		...(requestedZones.includes("Alphadec") ? {
-			alphadec_info: "Alphadec units (approx): Period (A-Z) ≈ 14.04 days (UTC yr / 26) | Arc (0-9) ≈ 33.7 hours (Period / 10) | Bar (A-Z) ≈ 77.75 minutes (Arc / 26) | Beat (0-9) ≈ 7.78 minutes (Bar / 10). Suffix is ms offset within the beat.",
-		} : {}),
+		...(requestedZones.includes("Alphadec")
+			? {
+					alphadec_info:
+						"Alphadec units (approx): Period (A-Z) ≈ 14.04 days (UTC yr / 26) | Arc (0-9) ≈ 33.7 hours (Period / 10) | Bar (A-Z) ≈ 77.75 minutes (Arc / 26) | Beat (0-9) ≈ 7.78 minutes (Bar / 10). Suffix is ms offset within the beat.",
+				}
+			: {}),
 	});
 	return entries;
 }

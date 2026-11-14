@@ -2,14 +2,14 @@ import { createMcpHandler } from "agents/mcp/server";
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import { toolDefinitions, getToolHelp } from "./tool-definitions.js";
 import { handleRestRequest } from "./rest.js";
+import { MCPCLOCK_VERSION } from "./version.js";
 import {
 	clockGet,
 	clockDayInfo,
 	clockConvert,
 	clockConvertAlphadec,
 	clockConvertUnixtime,
-	clockShiftUtc,
-	clockDeltaUtc,
+	clockOffsetUtc,
 	clockDeltaAlphadec,
 } from "./mcpclock.js";
 function mcpTool<T>(name: string, calculate: (args: T) => unknown) {
@@ -32,9 +32,13 @@ function mcpTool<T>(name: string, calculate: (args: T) => unknown) {
 function createServer() {
 	const server = new McpServer({
 		name: "MCP Clock",
-		version: "2026_J9E4",
+		version: MCPCLOCK_VERSION,
 	});
-	server.registerTool("clock_get", toolDefinitions.clock_get, mcpTool("clock_get", clockGet));
+	server.registerTool(
+		"clock_get",
+		toolDefinitions.clock_get,
+		mcpTool("clock_get", clockGet),
+	);
 	server.registerTool(
 		"clock_day_info",
 		toolDefinitions.clock_day_info,
@@ -56,14 +60,9 @@ function createServer() {
 		mcpTool("clock_convert_unixtime", clockConvertUnixtime),
 	);
 	server.registerTool(
-		"clock_shift_utc",
-		toolDefinitions.clock_shift_utc,
-		mcpTool("clock_shift_utc", clockShiftUtc),
-	);
-	server.registerTool(
-		"clock_delta_utc",
-		toolDefinitions.clock_delta_utc,
-		mcpTool("clock_delta_utc", clockDeltaUtc),
+		"clock_offset_utc",
+		toolDefinitions.clock_offset_utc,
+		mcpTool("clock_offset_utc", clockOffsetUtc),
 	);
 	server.registerTool(
 		"clock_delta_alphadec",
