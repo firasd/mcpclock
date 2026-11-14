@@ -4,9 +4,93 @@
 
 Works in Claude.ai, Claude iOS, Claude Code, OpenAI Codex, and any MCP-compatible client.
 
+## Use As a Library
+
+`src/mcpclock.ts` contains the clock calculations as typed, synchronous functions.
+It imports only the local `src/lib/alphadec.js` implementation and uses JavaScript
+`Date` and `Intl`; it has no MCP, Zod, or Cloudflare dependencies. To vendor the
+library, include both files and preserve their relative paths.
+
+```ts
+import { clockDayInfo, clockShiftUtc, clockDeltaUtc } from "./src/mcpclock";
+
+const calendar = clockDayInfo({ date: "2026-05-28" });
+const expiry = clockShiftUtc({ date_from: "NOW", delta: { days: 35 } });
+const distance = clockDeltaUtc({ end: expiry.shifted_utc_iso });
+```
+
+Each function takes an options object using the tool's argument names and returns
+plain data, with no JSON serialization or MCP response envelope. Invalid inputs
+throw exceptions. `clockGet()` and `clockDayInfo()` can be called without options.
+The `adec_canonical_only` flag and Alphadec explanation preamble belong to the MCP
+adapter, so they are not part of the library API.
+
+| MCP Tool | Library Export |
+|----------|----------------|
+| `clock_get` | `clockGet` |
+| `clock_day_info` | `clockDayInfo` |
+| `clock_convert` | `clockConvert` |
+| `clock_convert_alphadec` | `clockConvertAlphadec` |
+| `clock_convert_unixtime` | `clockConvertUnixtime` |
+| `clock_shift_utc` | `clockShiftUtc` |
+| `clock_delta_utc` | `clockDeltaUtc` |
+| `clock_delta_alphadec` | `clockDeltaAlphadec` |
+
+`src/tool-definitions.ts` supplies the MCP schemas, descriptions, and annotations;
+`src/index.ts` handles registration, response formatting, and the Worker endpoint.
+Calendar-year shifts use successive `setUTCFullYear` calls:
+February 29 rolls forward to March 1 in a non-leap year, and subsequent year
+steps retain March 1. Time-zone conversion retains the existing wall-clock
+offset calculation; it does not expose DST gap/overlap disambiguation options.
+
+Run the library and tool-definition tests with `npm test` on Node 22.6+ after
+installing dependencies. The library itself remains dependency-free apart from
+the local Alphadec implementation.
+
+## MCP Runtime
+
+The Worker uses MCP SDK v2 (`@modelcontextprotocol/server`), Cloudflare Agents,
+and Zod 4. `createMcpHandler` from `agents/mcp/server` receives the server factory
+and serves modern MCP requests plus stateless requests from legacy clients.
+Dependencies use caret ranges, with no active lockfile.
+
 ---
 
 ## Tools
+
+## GET API
+
+`/` returns a welcome message and the current clock output. `/tools/help` provides
+curl examples and dynamically generated parameter help. `/tools/<tool_name>`
+returns plain JSON through GET, with query parameters validated against the same
+schemas as MCP. Arrays and objects are JSON-encoded; scalar strings stay strings.
+
+```bash
+curl 'https://mcpclock.firasd.workers.dev/tools/clock_get'
+curl -G 'https://mcpclock.firasd.workers.dev/tools/clock_shift_utc' \
+  --data-urlencode 'date_from=NOW' --data-urlencode 'delta={"days":35}'
+curl 'https://mcpclock.firasd.workers.dev/tools/help?tool=clock_shift_utc'
+```
+
+All GET responses disable caching. Invalid inputs return 400, unknown paths 404,
+and unsupported methods 405. `/mcp` continues to serve MCP requests.
+
+### `clock_help`
+Returns descriptions, parameter JSON Schemas, and annotations from the same
+definitions used to register the MCP tools. Schemas include parameter descriptions,
+required fields, defaults, enums, and numeric or array constraints.
+
+- **`tool`** *(optional)* — Exact tool name. Omit to list every tool, including `clock_help`.
+
+```json
+clock_help{}
+clock_help{"tool": "clock_shift_utc"}
+```
+
+Definitions live in `src/tool-definitions.ts`; the help response is generated
+from those definitions on each call.
+
+---
 
 ### `clock_get`
 Returns current time in one or more time zones.
@@ -152,6 +236,7 @@ clock_convert_unixtime
 clock_shift_utc
 clock_delta_utc
 clock_delta_alphadec
+clock_help
 ```
 
 **Call a tool:**
@@ -200,4 +285,4 @@ Seasonal anchors (approximate): Period F = March equinox · Period M = June sols
 
 ## License
 
-[The Unlicense](https://unlicense.org/) — this is free and unencumbered software released into the public domain. Do whatever you want with it.
+[BSD Zero Clause (0BSD)](LICENSE).
